@@ -1,0 +1,56 @@
+<?php
+// install.php — Ejecutar UNA SOLA VEZ al instalar el sistema
+// Después de ejecutarlo, BÓRRALO del servidor
+
+require_once __DIR__ . '/config/db.php';
+
+$db = getConexion();
+$errores = [];
+
+// 1. Verificar que la BD tiene las tablas
+$tablas = ['roles','users','padres','alumnos','padre_alumno','banned_words'];
+foreach ($tablas as $tabla) {
+    $res = $db->query("SHOW TABLES LIKE '$tabla'");
+    if ($res->num_rows === 0) {
+        $errores[] = "Falta la tabla: $tabla — importa primero escuela.sql";
+    }
+}
+
+if (!empty($errores)) {
+    foreach ($errores as $e) echo " $e<br>";
+    echo "<br>Importa <b>escuela.sql</b> en MySQL y vuelve a ejecutar este archivo.";
+    exit;
+}
+
+// 2. Verificar si ya existe el superadmin
+$res = $db->query("SELECT id FROM users WHERE username = 'superadmin' LIMIT 1");
+
+if ($res->num_rows > 0) {
+    // Ya existe, solo actualiza el hash
+    $hash = password_hash('superadmin', PASSWORD_DEFAULT);
+    $stmt = $db->prepare("UPDATE users SET password_hash = ? WHERE username = 'superadmin'");
+    $stmt->bind_param('s', $hash);
+    $stmt->execute();
+    echo "Superadmin ya existía. Hash actualizado correctamente.<br>";
+} else {
+    // No existe, lo crea
+    $hash = password_hash('superadmin', PASSWORD_DEFAULT);
+    $stmt = $db->prepare("INSERT INTO users (username, password_hash, rol_id) VALUES ('superadmin', ?, 1)");
+    $stmt->bind_param('s', $hash);
+    if ($stmt->execute()) {
+        echo "Superadmin creado correctamente.<br>";
+    } else {
+        echo "Error al crear superadmin: " . $db->error . "<br>";
+        exit;
+    }
+}
+
+echo "<br>";
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━<br>";
+echo "<b>Sistema listo</b><br>";
+echo "Usuario: <b>superadmin</b><br>";
+echo "Contraseña: <b>superadmin</b><br>";
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━<br><br>";
+echo "<b>IMPORTANTE: Borra este archivo (install.php) del servidor.</b><br><br>";
+echo "<a href='login.php'>Ir al login</a>";
+?>
