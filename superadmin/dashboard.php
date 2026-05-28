@@ -115,6 +115,14 @@ include __DIR__ . '/../includes/header.php';
     Abre y cierra periodos para que los maestros capturen calificaciones
   </p>
 </a>
+
+<a class="nav-card" href="reportes.php">
+  <span class="nav-card__icon" aria-hidden="true">📊</span>
+  <h3 class="nav-card__title">Reportes</h3>
+  <p class="nav-card__desc">
+    Consulta calificaciones por grupo, materia o campo formativo
+  </p>
+</a>
   </nav>
 </main>
 
