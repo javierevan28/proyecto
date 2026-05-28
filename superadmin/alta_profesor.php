@@ -134,3 +134,14 @@ include __DIR__ . '/../includes/header.php';
             value="<?= htmlspecialchars($_POST['telefono'] ?? '') ?>"
             maxlength="20"
           >
+        </div>
+
+      </div><!-- /.form-grid -->
+
+      <!-- BOTÓN -->
+      <button class="btn" type="submit">Registrar profesor</button>
+    </form>
+  </section>
+</main>
+
+<?php include __DIR__ . '/../includes/footer.php'; ?>
