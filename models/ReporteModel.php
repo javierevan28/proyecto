@@ -9,9 +9,6 @@ class ReporteModel {
         $this->db = $db;
     }
 
-    // ----------------------------------------------------------
-    // Periodos abiertos de un ciclo
-    // ----------------------------------------------------------
     private function periodosAbiertos(int $cicloId): array {
         $stmt = $this->db->prepare(
             "SELECT periodo FROM periodos_apertura WHERE ciclo_id = ? ORDER BY periodo"
@@ -21,10 +18,6 @@ class ReporteModel {
         return array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC), 'periodo');
     }
 
-    // ----------------------------------------------------------
-    // Calificación de un alumno en una asignación y periodo
-    // Si es inglés devuelve el promedio de sus aspectos
-    // ----------------------------------------------------------
     private function obtenerCal(int $alumnoId, int $asigId, int $periodo, bool $esIngles): ?float {
         if ($esIngles) {
             $stmt = $this->db->prepare("
@@ -38,7 +31,6 @@ class ReporteModel {
             $res = $stmt->get_result()->fetch_assoc();
             return $res['promedio'] !== null ? round((float)$res['promedio'], 1) : null;
         }
-
         $stmt = $this->db->prepare("
             SELECT calificacion FROM calificaciones
             WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ? LIMIT 1
@@ -49,9 +41,6 @@ class ReporteModel {
         return $res && $res['calificacion'] !== null ? (float)$res['calificacion'] : null;
     }
 
-    // ----------------------------------------------------------
-    // Calcula trimestre a partir de dos periodos
-    // ----------------------------------------------------------
     private function calcTrimestre(?float $p1, ?float $p2): ?float {
         if ($p1 !== null && $p2 !== null) return round(($p1 + $p2) / 2, 1);
         if ($p1 !== null) return $p1;
@@ -59,9 +48,6 @@ class ReporteModel {
         return null;
     }
 
-    // ----------------------------------------------------------
-    // Lista grupos disponibles en un ciclo
-    // ----------------------------------------------------------
     public function listarGrupos(int $cicloId): array {
         $stmt = $this->db->prepare("
             SELECT DISTINCT seccion, grado, grupo
@@ -75,20 +61,34 @@ class ReporteModel {
 
     // ----------------------------------------------------------
     // Reporte principal
-    // Devuelve datos listos para mostrar por materia o por campo
-    // $vista = 'periodo' | 'trimestre'
-    // $agrupacion = 'materia' | 'campo'
+    // $vista       = 'periodo' | 'trimestre'
+    // $agrupacion  = 'materia' | 'campo'
+    // $seleccion   = 'todos' | '1'..'6' (periodos) | '1'..'3' (trimestres)
     // ----------------------------------------------------------
     public function obtenerReporte(
         int    $cicloId,
         string $seccion,
         int    $grado,
         string $grupo,
-        string $vista,       // periodo | trimestre
-        string $agrupacion   // materia | campo
+        string $vista,
+        string $agrupacion,
+        string $seleccion    // 'todos' | número
     ): array {
 
         $periodosAb = $this->periodosAbiertos($cicloId);
+
+        // Definir qué columnas de tiempo mostrar
+        if ($vista === 'periodo') {
+            $maxCols = 6;
+            $colsTodos = [1, 2, 3, 4, 5, 6];
+        } else {
+            $maxCols = 3;
+            $colsTodos = [1, 2, 3];
+        }
+
+        $colsSeleccionadas = ($seleccion === 'todos')
+            ? $colsTodos
+            : [(int)$seleccion];
 
         // Alumnos del grupo
         $stmtAl = $this->db->prepare("
@@ -101,7 +101,7 @@ class ReporteModel {
         $stmtAl->execute();
         $alumnos = $stmtAl->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        // Asignaciones del grupo con campo formativo
+        // Asignaciones del grupo
         $stmtAsig = $this->db->prepare("
             SELECT a.id AS asignacion_id, a.orden,
                    m.nombre AS materia_nombre,
@@ -119,17 +119,17 @@ class ReporteModel {
         $stmtAsig->execute();
         $asignaciones = $stmtAsig->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        // Para cada alumno calcular calificaciones por asignación
+        // Para cada alumno calcular valores
         foreach ($alumnos as &$al) {
-            $al['columnas'] = []; // columnas que se mostrarán en la tabla
+            $al['columnas'] = [];
 
             if ($agrupacion === 'materia') {
-                // Una columna por materia
                 foreach ($asignaciones as $asig) {
                     $asigId   = (int)$asig['asignacion_id'];
                     $esIngles = (int)$asig['es_ingles'] === 1;
-                    $cals     = [];
 
+                    // Calcular los 6 periodos siempre (para poder calcular trimestres)
+                    $cals = [];
                     for ($p = 1; $p <= 6; $p++) {
                         $cals[$p] = in_array($p, $periodosAb)
                             ? $this->obtenerCal($al['alumno_id'], $asigId, $p, $esIngles)
@@ -141,22 +141,22 @@ class ReporteModel {
                         $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
                     }
 
-                    if ($vista === 'periodo') {
-                        $valores = $cals;
-                    } else {
-                        $valores = $trims;
+                    // Filtrar solo las columnas seleccionadas
+                    $valoresFiltrados = [];
+                    foreach ($colsSeleccionadas as $col) {
+                        $valoresFiltrados[$col] = $vista === 'periodo'
+                            ? $cals[$col]
+                            : $trims[$col];
                     }
 
                     $al['columnas'][] = [
                         'key'    => 'asig_' . $asigId,
-                        'valor'  => $valores,
-                        'cals'   => $cals,
-                        'trims'  => $trims,
+                        'valor'  => $valoresFiltrados,
                     ];
                 }
 
             } else {
-                // Agrupar por campo formativo — promedio de materias del campo
+                // Agrupar por campo formativo
                 $porCampo = [];
                 foreach ($asignaciones as $asig) {
                     $campoKey = $asig['campo_id'] ?? 'sin_campo';
@@ -165,8 +165,8 @@ class ReporteModel {
 
                     if (!isset($porCampo[$campoKey])) {
                         $porCampo[$campoKey] = [
-                            'campo_nombre' => $asig['campo_nombre'] ?? 'Sin campo',
-                            'materias_cals'=> [],
+                            'campo_nombre'  => $asig['campo_nombre'] ?? 'Sin campo',
+                            'materias_cals' => [],
                         ];
                     }
 
@@ -179,7 +179,6 @@ class ReporteModel {
                     $porCampo[$campoKey]['materias_cals'][] = $cals;
                 }
 
-                // Promediar por campo
                 foreach ($porCampo as $campoKey => $campoData) {
                     $promCals = [];
                     for ($p = 1; $p <= 6; $p++) {
@@ -187,7 +186,9 @@ class ReporteModel {
                             array_column($campoData['materias_cals'], $p),
                             fn($v) => $v !== null
                         );
-                        $promCals[$p] = count($vals) > 0 ? round(array_sum($vals) / count($vals), 1) : null;
+                        $promCals[$p] = count($vals) > 0
+                            ? round(array_sum($vals) / count($vals), 1)
+                            : null;
                     }
 
                     $promTrims = [];
@@ -195,16 +196,22 @@ class ReporteModel {
                         $promTrims[$t] = $this->calcTrimestre($promCals[$t*2-1], $promCals[$t*2]);
                     }
 
+                    // Filtrar columnas seleccionadas
+                    $valoresFiltrados = [];
+                    foreach ($colsSeleccionadas as $col) {
+                        $valoresFiltrados[$col] = $vista === 'periodo'
+                            ? $promCals[$col]
+                            : $promTrims[$col];
+                    }
+
                     $al['columnas'][] = [
                         'key'   => 'campo_' . $campoKey,
-                        'valor' => $vista === 'periodo' ? $promCals : $promTrims,
-                        'cals'  => $promCals,
-                        'trims' => $promTrims,
+                        'valor' => $valoresFiltrados,
                     ];
                 }
             }
 
-            // Promedio general del alumno
+            // Promedio general — solo con los valores seleccionados
             $todosLosValores = [];
             foreach ($al['columnas'] as $col) {
                 foreach ($col['valor'] as $v) {
@@ -222,9 +229,8 @@ class ReporteModel {
         if ($agrupacion === 'materia') {
             foreach ($asignaciones as $asig) {
                 $encabezados[] = [
-                    'key'    => 'asig_' . $asig['asignacion_id'],
-                    'label'  => $asig['materia_nombre'],
-                    'campo'  => $asig['campo_nombre'] ?? 'Sin campo',
+                    'key'   => 'asig_' . $asig['asignacion_id'],
+                    'label' => $asig['materia_nombre'],
                 ];
             }
         } else {
@@ -236,24 +242,26 @@ class ReporteModel {
                     $encabezados[] = [
                         'key'   => 'campo_' . $campoKey,
                         'label' => $asig['campo_nombre'] ?? 'Sin campo',
-                        'campo' => '',
                     ];
                 }
             }
         }
 
-        // Columnas de tiempo según vista
-        $colsTiempo = $vista === 'periodo'
-            ? ['P1','P2','P3','P4','P5','P6']
-            : ['T1','T2','T3'];
+        // Etiquetas de columnas de tiempo
+        $etiquetasCols = [];
+        foreach ($colsSeleccionadas as $col) {
+            $etiquetasCols[$col] = ($vista === 'periodo' ? 'P' : 'T') . $col;
+        }
 
         return [
             'alumnos'          => $alumnos,
             'encabezados'      => $encabezados,
-            'colsTiempo'       => $colsTiempo,
+            'colsSeleccionadas'=> $colsSeleccionadas,
+            'etiquetasCols'    => $etiquetasCols,
             'periodosAbiertos' => $periodosAb,
             'vista'            => $vista,
             'agrupacion'       => $agrupacion,
+            'seleccion'        => $seleccion,
         ];
     }
 }
