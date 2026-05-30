@@ -1,5 +1,5 @@
 <?php
-// padre/boleta_pdf.php
+// padre/boleta.php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../models/UserModel.php';
@@ -7,10 +7,7 @@ require_once __DIR__ . '/../models/PadreModel.php';
 require_once __DIR__ . '/../models/AlumnoModel.php';
 require_once __DIR__ . '/../models/CicloModel.php';
 require_once __DIR__ . '/../models/BoletaModel.php';
-require_once __DIR__ . '/../vendor/autoload.php';
 requireRol([2]);
-
-use Mpdf\Mpdf;
 
 $db          = getConexion();
 $padreModel  = new PadreModel($db, new UserModel($db));
@@ -23,7 +20,6 @@ if (!$padre) { header('Location: /proyecto/login.php'); exit; }
 
 $cicloActivo = $cicloModelo->obtenerActivo();
 $alumnoId    = (int)($_GET['alumno_id'] ?? 0);
-$tipo        = $_GET['tipo'] ?? 'espanol';
 
 $hijos = $alumnoModel->obtenerPorPadreId((int)$padre['id']);
 $alumnoValido = false;
@@ -36,10 +32,7 @@ if (!$alumnoValido || !$cicloActivo) {
     exit;
 }
 
-$boleta           = $boletaModel->obtenerBoleta($alumnoId, (int)$cicloActivo['id']);
-$alumno           = $boleta['alumno']           ?? [];
-$porCampo         = $boleta['porCampo']         ?? [];
-$periodosAbiertos = $boleta['periodosAbiertos'] ?? [];
+$boleta = $boletaModel->obtenerBoleta($alumnoId, (int)$cicloActivo['id']);
 
 $asignacionInglesId = null;
 foreach ($boleta['materias'] ?? [] as $m) {
@@ -49,223 +42,212 @@ foreach ($boleta['materias'] ?? [] as $m) {
     }
 }
 
-$boletaIngles = ($tipo === 'ingles' && $asignacionInglesId)
+$boletaIngles = $asignacionInglesId
     ? $boletaModel->obtenerBoletaIngles($alumnoId, (int)$cicloActivo['id'], $asignacionInglesId)
     : null;
 
-// ── HTML del PDF ──────────────────────────────────────────────
-ob_start();
+$alumno    = $boleta['alumno']   ?? [];
+$porCampo  = $boleta['porCampo'] ?? [];
+$periodosAbiertos = $boleta['periodosAbiertos'] ?? [];
+
+$totalAusencias = 0;
+$promedioDisciplina = 0;
+$promedioHigiene = 0;
+
+if ($cicloActivo && $alumnoId) {
+    $stmt = $db->prepare("
+        SELECT 
+            SUM(ausencias) as total_ausencias,
+            AVG(disciplina) as promedio_disciplina,
+            AVG(higiene) as promedio_higiene
+        FROM calificaciones_titular
+        WHERE alumno_id = ? AND ciclo_id = ?
+    ");
+    $stmt->bind_param('ii', $alumnoId, $cicloActivo['id']);
+    $stmt->execute();
+    $resTitular = $stmt->get_result()->fetch_assoc();
+    
+    $totalAusencias = (int)($resTitular['total_ausencias'] ?? 0);
+    $promedioDisciplina = round($resTitular['promedio_disciplina'] ?? 0, 1);
+    $promedioHigiene = round($resTitular['promedio_higiene'] ?? 0, 1);
+}
+
+$pageTitle = 'Boleta — ' . ($alumno['nombre'] ?? '');
+$backLink  = 'mis_hijos.php';
+$backLabel = '← Mis hijos';
+include __DIR__ . '/../includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: sans-serif; font-size: 10px; color: #334155; }
 
-  .header {
-    background: #1e3a5f;
-    color: #fff;
-    padding: 8px 12px;
-    margin-bottom: 8px;
-  }
-  .header h1 { font-size: 13px; }
-  .header p  { font-size: 9px; }
+<main class="container">
 
-  .datos {
-    border: 1px solid #e2e8f0;
-    padding: 5px 8px;
-    margin-bottom: 8px;
-    background: #f8fafc;
-    font-size: 9px;
-  }
-  .datos strong { color: #1e3a5f; }
+  <?php if (empty($alumno)): ?>
+    <p class="empty-state">No se encontró información del alumno.</p>
+  <?php else: ?>
 
-  .seccion-titulo {
-    font-size: 10px;
-    font-weight: bold;
-    color: #1e3a5f;
-    border-bottom: 1px solid #1e3a5f;
-    padding-bottom: 2px;
-    margin-bottom: 5px;
-  }
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex; justify-content:space-between; align-items:start; flex-wrap:wrap; gap:1rem;">
+      <div>
+        <h2 style="color:var(--color-primary); font-size:1.2rem; margin-bottom:.3rem;">
+          <?= htmlspecialchars($alumno['nombre'] . ' ' . $alumno['apellido_paterno'] . ' ' . ($alumno['apellido_materno'] ?? '')) ?>
+        </h2>
+        <p class="form-hint" style="margin-top:0;">
+          Matrícula: <strong><?= htmlspecialchars($alumno['matricula'] ?? '—') ?></strong>
+          &nbsp;|&nbsp;
+          <?= ucfirst($alumno['seccion']) ?> — <?= $alumno['grado'] ?>° <?= $alumno['grupo'] ?>
+          &nbsp;|&nbsp;
+          Ciclo: <strong><?= htmlspecialchars($cicloActivo['nombre']) ?></strong>
+        </p>
+      </div>
+      <div style="display:flex; gap:.6rem;">
+        <a class="btn btn--sm btn--accent"
+           href="boleta_pdf.php?alumno_id=<?= $alumnoId ?>&tipo=espanol"
+           target="_blank">
+          ⬇ PDF Español
+        </a>
+        <?php if ($boletaIngles): ?>
+          <a class="btn btn--sm btn--success"
+             href="boleta_pdf.php?alumno_id=<?= $alumnoId ?>&tipo=ingles"
+             target="_blank">
+            ⬇ PDF Inglés
+          </a>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 8.5px;
-    margin-bottom: 10px;
-  }
-  th {
-    background: #1e3a5f;
-    color: #fff;
-    padding: 3px 4px;
-    text-align: center;
-    border: 1px solid #1e3a5f;
-  }
-  th.izq { text-align: left; }
-  td {
-    padding: 3px 4px;
-    border: 1px solid #e2e8f0;
-    text-align: center;
-  }
-  td.izq { text-align: left; }
-  tr:nth-child(even) td { background: #f8fafc; }
+  <section class="card" style="margin-bottom:1.5rem;">
+    <h3 class="section-title" style="margin-bottom:1rem; font-size:1rem;">
+      📋 Boleta — Español
+    </h3>
 
-  .campo-cell {
-    background: #dbeafe !important;
-    font-weight: bold;
-    color: #1e3a5f;
-    font-size: 8px;
-  }
-  .trim { background: #eff6ff !important; font-weight: bold; color: #1e3a5f; }
-  .rep  { color: #991b1b; font-weight: bold; }
-
-  .firmas { margin-top: 30px; width: 100%; }
-  .firma  {
-    display: inline-block;
-    width: 30%;
-    text-align: center;
-    border-top: 1px solid #334155;
-    padding-top: 3px;
-    font-size: 8px;
-    margin-right: 4%;
-  }
-</style>
-</head>
-<body>
-
-<div class="header">
-  <h1>🏫 Sistema Escolar —
-    <?= $tipo === 'ingles' ? 'Boleta de Inglés' : 'Boleta de Calificaciones' ?>
-  </h1>
-  <p>Ciclo escolar: <?= htmlspecialchars($cicloActivo['nombre']) ?></p>
-</div>
-
-<div class="datos">
-  <strong>Alumno:</strong>
-  <?= htmlspecialchars($alumno['nombre'] . ' ' . $alumno['apellido_paterno'] . ' ' . ($alumno['apellido_materno'] ?? '')) ?>
-  &nbsp;&nbsp;
-  <strong>Matrícula:</strong> <?= htmlspecialchars($alumno['matricula'] ?? '—') ?>
-  &nbsp;&nbsp;
-  <strong>Grado:</strong> <?= $alumno['grado'] ?>° <?= $alumno['grupo'] ?>
-  &nbsp;&nbsp;
-  <strong>Sección:</strong> <?= ucfirst($alumno['seccion']) ?>
-</div>
-
-<?php if ($tipo === 'espanol'): ?>
-
-  <p class="seccion-titulo">Calificaciones por materia</p>
-  <table>
-    <thead>
-      <tr>
-        <th class="izq" style="width:16%;">Campo formativo</th>
-        <th class="izq" style="width:18%;">Materia</th>
-        <th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th>
-        <th class="trim">T1</th>
-        <th class="trim">T2</th>
-        <th class="trim">T3</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php foreach ($porCampo as $campo => $materias): ?>
-        <?php
-          $filtradas = array_values(array_filter($materias, fn($x) => !(int)$x['es_ingles']));
-          if (empty($filtradas)) continue;
-        ?>
-        <?php foreach ($filtradas as $i => $m): ?>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
           <tr>
-            <?php if ($i === 0): ?>
-              <td class="campo-cell izq" rowspan="<?= count($filtradas) ?>">
-                <?= htmlspecialchars($campo) ?>
-              </td>
-            <?php endif; ?>
-            <td class="izq">
-              <?= htmlspecialchars($m['materia_nombre']) ?>
-              <?php if (!empty($m['subcomponente'])): ?>
-                <br><small style="color:#64748b;">(<?= htmlspecialchars($m['subcomponente']) ?>)</small>
-              <?php endif; ?>
-            </td>
+            <th>Campo formativo</th>
+            <th>Materia</th>
             <?php for ($p = 1; $p <= 6; $p++): ?>
-              <?php $cal = $m['calificaciones'][$p] ?? null; ?>
-              <td class="<?= ($cal !== null && $cal < 6) ? 'rep' : '' ?>">
-                <?= $cal ?? (in_array($p, $periodosAbiertos) ? '—' : '') ?>
-              </td>
+              <th style="background:var(--color-primary); color:#fff; min-width:50px;">P<?= $p ?></th>
             <?php endfor; ?>
-            <?php for ($t = 1; $t <= 3; $t++): ?>
-              <?php $prom = $m['trimestres'][$t] ?? null; ?>
-              <td class="trim <?= ($prom !== null && $prom < 6) ? 'rep' : '' ?>">
-                <?= $prom ?? '—' ?>
-              </td>
-            <?php endfor; ?>
+            <th style="background:var(--color-primary); color:#fff;">T1</th>
+            <th style="background:var(--color-primary); color:#fff;">T2</th>
+            <th style="background:var(--color-primary); color:#fff;">T3</th>
           </tr>
-        <?php endforeach; ?>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
+        </thead>
+        <tbody>
+          <?php foreach ($porCampo as $campo => $materias): ?>
+            <?php foreach ($materias as $i => $m): ?>
+              <?php if ((int)$m['es_ingles']) continue; ?>
+              <tr>
+                <?php if ($i === 0): ?>
+                  <td rowspan="<?= count(array_filter($materias, fn($x) => !(int)$x['es_ingles'])) ?>"
+                      style="font-weight:600; color:var(--color-primary); font-size:.82rem; vertical-align:top;">
+                    <?= htmlspecialchars($campo) ?>
+                  </td>
+                <?php endif; ?>
+                <td style="font-size:.85rem;">
+                  <?= htmlspecialchars($m['materia_nombre']) ?>
+                  <?php if (!empty($m['subcomponente'])): ?>
+                    <span class="badge" style="background:#f1f5f9; color:var(--color-muted);"><?= htmlspecialchars($m['subcomponente']) ?></span>
+                  <?php endif; ?>
+                </td>
+                <?php for ($p = 1; $p <= 6; $p++): ?>
+                  <?php $cal = $m['calificaciones'][$p] ?? null; ?>
+                  <td style="text-align:center; font-size:.85rem; <?= ($cal !== null && $cal < 6) ? 'color:#991b1b; font-weight:600;' : '' ?>">
+                    <?= $cal ?? (in_array($p, $periodosAbiertos) ? '—' : '') ?>
+                  </td>
+                <?php endfor; ?>
+                <?php for ($t = 1; $t <= 3; $t++): ?>
+                  <?php $prom = $m['trimestres'][$t] ?? null; ?>
+                  <td style="text-align:center; font-size:.85rem; font-weight:600; background:#f8fafc; <?= ($prom !== null && $prom < 6) ? 'color:#991b1b;' : 'color:var(--color-primary);' ?>">
+                    <?= $prom ?? '—' ?>
+                  </td>
+                <?php endfor; ?>
+              </tr>
+            <?php endforeach; ?>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </section>
 
-<?php elseif ($tipo === 'ingles' && $boletaIngles): ?>
+  <?php if ($boletaIngles && !empty($boletaIngles['aspectos'])): ?>
+  <section class="card" style="margin-bottom:1.5rem;">
+    <h3 class="section-title" style="margin-bottom:1rem; font-size:1rem;">
+      🌐 Boleta — Inglés
+    </h3>
 
-  <p class="seccion-titulo">Calificaciones — Inglés</p>
-  <table>
-    <thead>
-      <tr>
-        <th class="izq" style="width:22%;">Habilidad</th>
-        <th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th>
-        <th class="trim">T1</th>
-        <th class="trim">T2</th>
-        <th class="trim">T3</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php foreach ($boletaIngles['aspectos'] as $asp): ?>
-        <tr>
-          <td class="izq"><?= htmlspecialchars($asp['nombre']) ?></td>
-          <?php for ($p = 1; $p <= 6; $p++): ?>
-            <?php $cal = $asp['calificaciones'][$p] ?? null; ?>
-            <td class="<?= ($cal !== null && $cal < 6) ? 'rep' : '' ?>">
-              <?= $cal ?? (in_array($p, $boletaIngles['periodosAbiertos']) ? '—' : '') ?>
-            </td>
-          <?php endfor; ?>
-          <?php for ($t = 1; $t <= 3; $t++): ?>
-            <?php $prom = $asp['trimestres'][$t] ?? null; ?>
-            <td class="trim <?= ($prom !== null && $prom < 6) ? 'rep' : '' ?>">
-              <?= $prom ?? '—' ?>
-            </td>
-          <?php endfor; ?>
-        </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Habilidad</th>
+            <?php for ($p = 1; $p <= 6; $p++): ?>
+              <th style="background:var(--color-primary); color:#fff; min-width:50px;">P<?= $p ?></th>
+            <?php endfor; ?>
+            <th style="background:var(--color-primary); color:#fff;">T1</th>
+            <th style="background:var(--color-primary); color:#fff;">T2</th>
+            <th style="background:var(--color-primary); color:#fff;">T3</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($boletaIngles['aspectos'] as $asp): ?>
+            <tr>
+              <td style="font-size:.85rem;"><?= htmlspecialchars($asp['nombre']) ?></td>
+              <?php for ($p = 1; $p <= 6; $p++): ?>
+                <?php $cal = $asp['calificaciones'][$p] ?? null; ?>
+                <td style="text-align:center; font-size:.85rem; <?= ($cal !== null && $cal < 6) ? 'color:#991b1b; font-weight:600;' : '' ?>">
+                  <?= $cal ?? (in_array($p, $boletaIngles['periodosAbiertos']) ? '—' : '') ?>
+                </td>
+              <?php endfor; ?>
+              <?php for ($t = 1; $t <= 3; $t++): ?>
+                <?php $prom = $asp['trimestres'][$t] ?? null; ?>
+                <td style="text-align:center; font-size:.85rem; font-weight:600; background:#f8fafc; <?= ($prom !== null && $prom < 6) ? 'color:#991b1b;' : 'color:var(--color-primary);' ?>">
+                  <?= $prom ?? '—' ?>
+                </td>
+              <?php endfor; ?>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <?php endif; ?>
 
-<?php endif; ?>
+  <div class="alert alert--info" style="margin-top:1.5rem; text-align:center;">
+    <div style="display: grid; grid-template-columns: repeat(<?= $alumno['seccion'] === 'secundaria' ? '3' : '2' ?>, 1fr); gap: 1rem;">
+      
+      <div>
+        <strong>📅 TOTAL DE AUSENCIAS</strong><br>
+        <span style="font-size: 1.8rem; font-weight: bold; color: #92400e;"><?= $totalAusencias ?></span><br>
+        <small class="form-hint">días faltados en el ciclo</small>
+      </div>
 
-<div class="firmas">
-  <span class="firma">Director(a)</span>
-  <span class="firma">Maestro(a) Titular</span>
-  <span class="firma">Padre / Tutor</span>
-</div>
+      <div>
+        <strong>⚖️ PROMEDIO DE DISCIPLINA</strong><br>
+        <span style="font-size: 1.8rem; font-weight: bold; color: #065f46;"><?= number_format($promedioDisciplina, 1) ?></span><br>
+        <small class="form-hint">calificación 0-10</small>
+      </div>
 
-</body>
-</html>
-<?php
-$html = ob_get_clean();
+      <?php if ($alumno['seccion'] === 'secundaria'): ?>
+      <div>
+        <strong>🧼 PROMEDIO DE HIGIENE</strong><br>
+        <span style="font-size: 1.8rem; font-weight: bold; color: #1d4ed8;"><?= number_format($promedioHigiene, 1) ?></span><br>
+        <small class="form-hint">calificación 0-10</small>
+      </div>
+      <?php endif; ?>
 
-// Generar PDF con MPDF
-$mpdf = new Mpdf([
-    'mode'        => 'utf-8',
-    'format'      => 'Letter',
-    'orientation' => 'P',
-    'margin_top'  => 10,
-    'margin_bottom'=> 10,
-    'margin_left' => 10,
-    'margin_right'=> 10,
-    'tempDir'     => sys_get_temp_dir(),
-]);
+    </div>
+  </div>
 
-$mpdf->WriteHTML($html);
+  <div class="form-hint" style="text-align: center; margin-top: 1rem;">
+    📌 P = Periodo (1-6) | T = Trimestre (1-3)
+    <?php if ($totalAusencias > 0): ?>
+      <span style="margin-left: 1rem;">⚠️ Total de ausencias: <?= $totalAusencias ?> días</span>
+    <?php endif; ?>
+  </div>
 
-$nombreArchivo = 'boleta_' . $tipo . '_' . $alumnoId . '.pdf';
-$mpdf->Output($nombreArchivo, 'D'); // D = descarga
-exit;
+  <?php endif; ?>
+</main>
+
+<?php include __DIR__ . '/../includes/footer.php'; ?>

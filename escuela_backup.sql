@@ -1,4 +1,4 @@
--- MariaDB dump 10.19  Distrib 10.4.28-MariaDB, for osx10.10 (x86_64)
+-- MariaDB dump 10.19  Distrib 10.4.28-MariaDB, for Linux (x86_64)
 --
 -- Host: localhost    Database: escuela
 -- ------------------------------------------------------
@@ -184,7 +184,7 @@ CREATE TABLE `asignacion_maestros` (
   KEY `fk_asigmaestro_prof` (`profesor_id`),
   CONSTRAINT `fk_asigmaestro_asig` FOREIGN KEY (`asignacion_id`) REFERENCES `asignaciones` (`id`),
   CONSTRAINT `fk_asigmaestro_prof` FOREIGN KEY (`profesor_id`) REFERENCES `profesores` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -193,6 +193,7 @@ CREATE TABLE `asignacion_maestros` (
 
 LOCK TABLES `asignacion_maestros` WRITE;
 /*!40000 ALTER TABLE `asignacion_maestros` DISABLE KEYS */;
+INSERT INTO `asignacion_maestros` VALUES (1,2,1,0,'2026-05-26 16:56:52'),(2,4,1,0,'2026-05-26 16:56:52'),(3,6,1,1,'2026-05-26 16:56:52'),(4,7,1,0,'2026-05-26 16:56:52'),(5,9,1,1,'2026-05-26 16:56:52'),(6,10,1,1,'2026-05-26 16:56:52'),(7,11,1,1,'2026-05-26 16:56:52'),(8,12,1,1,'2026-05-26 16:56:52'),(9,13,1,1,'2026-05-26 16:56:52'),(10,15,1,0,'2026-05-26 17:07:13'),(11,16,1,0,'2026-05-26 17:07:13'),(12,17,1,0,'2026-05-26 17:07:13'),(13,19,1,0,'2026-05-26 17:07:13'),(14,20,1,0,'2026-05-26 17:07:13'),(15,22,1,0,'2026-05-26 17:07:13'),(16,23,1,0,'2026-05-26 17:07:13'),(17,24,1,0,'2026-05-26 17:07:13'),(18,26,1,0,'2026-05-26 17:07:13');
 /*!40000 ALTER TABLE `asignacion_maestros` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -221,7 +222,7 @@ CREATE TABLE `asignaciones` (
   CONSTRAINT `fk_asig_campo` FOREIGN KEY (`campo_formativo_id`) REFERENCES `campos_formativos` (`id`),
   CONSTRAINT `fk_asig_ciclo` FOREIGN KEY (`ciclo_id`) REFERENCES `ciclos_escolares` (`id`),
   CONSTRAINT `fk_asig_materia` FOREIGN KEY (`materia_id`) REFERENCES `materias` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -230,6 +231,7 @@ CREATE TABLE `asignaciones` (
 
 LOCK TABLES `asignaciones` WRITE;
 /*!40000 ALTER TABLE `asignaciones` DISABLE KEYS */;
+INSERT INTO `asignaciones` VALUES (1,1,7,4,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(2,1,9,2,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(3,1,14,4,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(4,1,13,3,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(5,1,6,1,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(6,1,11,3,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(7,1,12,3,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(8,1,5,1,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(9,1,2,1,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(10,1,8,2,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(11,1,16,4,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(12,1,10,2,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(13,1,15,4,'primaria',1,'A',0,1,'2026-05-26 16:56:52'),(14,1,7,4,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(15,1,9,2,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(16,1,14,4,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(17,1,13,3,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(18,1,6,1,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(19,1,11,3,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(20,1,12,3,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(21,1,5,1,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(22,1,2,1,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(23,1,8,2,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(24,1,16,4,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(25,1,10,2,'primaria',1,'B',0,1,'2026-05-26 17:07:13'),(26,1,15,4,'primaria',1,'B',0,1,'2026-05-26 17:07:13');
 /*!40000 ALTER TABLE `asignaciones` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -256,6 +258,108 @@ LOCK TABLES `banned_words` WRITE;
 /*!40000 ALTER TABLE `banned_words` DISABLE KEYS */;
 INSERT INTO `banned_words` VALUES (4,'culo'),(3,'mier'),(5,'pene'),(1,'puta'),(2,'puto'),(6,'vagi');
 /*!40000 ALTER TABLE `banned_words` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `calificaciones`
+--
+
+DROP TABLE IF EXISTS `calificaciones`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `calificaciones` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `alumno_id` int(10) unsigned NOT NULL,
+  `asignacion_id` int(10) unsigned NOT NULL,
+  `periodo` tinyint(3) unsigned NOT NULL COMMENT '1 al 6',
+  `calificacion` tinyint(3) unsigned DEFAULT NULL COMMENT 'Entero, NULL = sin capturar',
+  `capturado_por` int(10) unsigned NOT NULL COMMENT 'profesor_id',
+  `capturado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `calificaciones`
+--
+
+LOCK TABLES `calificaciones` WRITE;
+/*!40000 ALTER TABLE `calificaciones` DISABLE KEYS */;
+INSERT INTO `calificaciones` VALUES (1,1,10,1,10,1,'2026-05-26 17:03:06','2026-05-26 17:03:06'),(2,3,10,1,10,1,'2026-05-26 17:03:06','2026-05-26 17:03:06'),(3,1,4,1,10,1,'2026-05-26 19:53:44','2026-05-26 19:53:44'),(4,3,4,1,10,1,'2026-05-26 19:53:44','2026-05-26 19:53:44'),(5,1,12,1,10,1,'2026-05-26 19:53:54','2026-05-26 19:53:54'),(6,3,12,1,10,1,'2026-05-26 19:53:54','2026-05-26 19:53:54'),(7,1,6,1,10,1,'2026-05-26 19:54:12','2026-05-26 19:54:12'),(8,3,6,1,9,1,'2026-05-26 19:54:12','2026-05-26 19:54:12'),(9,1,7,1,10,1,'2026-05-26 19:54:26','2026-05-26 19:54:26'),(10,3,7,1,10,1,'2026-05-26 19:54:26','2026-05-26 19:54:26'),(11,1,2,1,9,1,'2026-05-26 19:54:34','2026-05-26 19:54:34'),(12,3,2,1,9,1,'2026-05-26 19:54:34','2026-05-26 19:54:34'),(13,1,11,1,9,1,'2026-05-26 19:54:45','2026-05-26 19:54:45'),(14,3,11,1,9,1,'2026-05-26 19:54:45','2026-05-26 19:54:45'),(15,1,13,1,8,1,'2026-05-26 19:54:56','2026-05-26 19:54:56'),(16,3,13,1,9,1,'2026-05-26 19:54:56','2026-05-26 19:54:56'),(17,1,9,1,9,1,'2026-05-26 19:55:03','2026-05-26 19:55:03'),(18,3,9,1,8,1,'2026-05-26 19:55:03','2026-05-26 19:55:03');
+/*!40000 ALTER TABLE `calificaciones` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `calificaciones_ingles`
+--
+
+DROP TABLE IF EXISTS `calificaciones_ingles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `calificaciones_ingles` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `alumno_id` int(10) unsigned NOT NULL,
+  `aspecto_id` int(10) unsigned NOT NULL,
+  `periodo` tinyint(3) unsigned NOT NULL,
+  `calificacion` tinyint(3) unsigned DEFAULT NULL,
+  `capturado_por` int(10) unsigned NOT NULL,
+  `capturado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cali` (`alumno_id`,`aspecto_id`,`periodo`),
+  KEY `fk_cali_aspecto` (`aspecto_id`),
+  KEY `fk_cali_prof` (`capturado_por`),
+  CONSTRAINT `fk_cali_alumno` FOREIGN KEY (`alumno_id`) REFERENCES `alumnos` (`id`),
+  CONSTRAINT `fk_cali_aspecto` FOREIGN KEY (`aspecto_id`) REFERENCES `asignacion_ingles_aspectos` (`id`),
+  CONSTRAINT `fk_cali_prof` FOREIGN KEY (`capturado_por`) REFERENCES `profesores` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `calificaciones_ingles`
+--
+
+LOCK TABLES `calificaciones_ingles` WRITE;
+/*!40000 ALTER TABLE `calificaciones_ingles` DISABLE KEYS */;
+/*!40000 ALTER TABLE `calificaciones_ingles` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `calificaciones_titular`
+--
+
+DROP TABLE IF EXISTS `calificaciones_titular`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `calificaciones_titular` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `alumno_id` int(10) unsigned NOT NULL,
+  `ciclo_id` int(10) unsigned NOT NULL,
+  `periodo` tinyint(3) unsigned NOT NULL,
+  `socioemocional` tinyint(3) unsigned DEFAULT NULL,
+  `ausencias` tinyint(3) unsigned DEFAULT NULL,
+  `disciplina` tinyint(3) unsigned DEFAULT NULL,
+  `higiene` tinyint(3) unsigned DEFAULT NULL COMMENT 'Solo secundaria',
+  `capturado_por` int(10) unsigned NOT NULL,
+  `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cal_titular` (`alumno_id`,`ciclo_id`,`periodo`),
+  KEY `fk_ct_ciclo` (`ciclo_id`),
+  KEY `fk_ct_prof` (`capturado_por`),
+  CONSTRAINT `fk_ct_alumno` FOREIGN KEY (`alumno_id`) REFERENCES `alumnos` (`id`),
+  CONSTRAINT `fk_ct_ciclo` FOREIGN KEY (`ciclo_id`) REFERENCES `ciclos_escolares` (`id`),
+  CONSTRAINT `fk_ct_prof` FOREIGN KEY (`capturado_por`) REFERENCES `profesores` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `calificaciones_titular`
+--
+
+LOCK TABLES `calificaciones_titular` WRITE;
+/*!40000 ALTER TABLE `calificaciones_titular` DISABLE KEYS */;
+/*!40000 ALTER TABLE `calificaciones_titular` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -316,6 +420,41 @@ INSERT INTO `ciclos_escolares` VALUES (1,'2025 - 2026','2025-09-01','2026-07-15'
 UNLOCK TABLES;
 
 --
+-- Table structure for table `grupo_titular`
+--
+
+DROP TABLE IF EXISTS `grupo_titular`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `grupo_titular` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `ciclo_id` int(10) unsigned NOT NULL,
+  `asignacion_id` int(10) unsigned NOT NULL,
+  `profesor_id` int(10) unsigned NOT NULL,
+  `seccion` enum('maternal','preescolar','primaria','secundaria') NOT NULL,
+  `grado` tinyint(3) unsigned NOT NULL,
+  `grupo` enum('A','B','C','D') NOT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_grupo_titular` (`ciclo_id`,`seccion`,`grado`,`grupo`),
+  KEY `fk_gt_asig` (`asignacion_id`),
+  KEY `fk_gt_prof` (`profesor_id`),
+  CONSTRAINT `fk_gt_asig` FOREIGN KEY (`asignacion_id`) REFERENCES `asignaciones` (`id`),
+  CONSTRAINT `fk_gt_ciclo` FOREIGN KEY (`ciclo_id`) REFERENCES `ciclos_escolares` (`id`),
+  CONSTRAINT `fk_gt_prof` FOREIGN KEY (`profesor_id`) REFERENCES `profesores` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `grupo_titular`
+--
+
+LOCK TABLES `grupo_titular` WRITE;
+/*!40000 ALTER TABLE `grupo_titular` DISABLE KEYS */;
+/*!40000 ALTER TABLE `grupo_titular` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `materias`
 --
 
@@ -343,7 +482,7 @@ CREATE TABLE `materias` (
 
 LOCK TABLES `materias` WRITE;
 /*!40000 ALTER TABLE `materias` DISABLE KEYS */;
-INSERT INTO `materias` VALUES (2,'Lengua Materna',1,0,0,0,1,'2026-05-21 21:47:08'),(3,'Speaking',NULL,1,0,0,1,'2026-05-22 08:55:41'),(4,'Español',1,0,0,0,1,'2026-05-24 10:26:38'),(5,'Inglés',1,1,0,0,1,'2026-05-24 10:26:38'),(6,'Francés',1,0,0,0,1,'2026-05-24 10:26:38'),(7,'Artes',4,0,1,0,1,'2026-05-24 10:26:38'),(8,'Matemáticas',2,0,0,0,1,'2026-05-24 10:26:38'),(9,'Ciencias Naturales',2,0,0,0,1,'2026-05-24 10:26:38'),(10,'Tecnología',2,0,0,0,1,'2026-05-24 10:26:38'),(11,'Geografía',3,0,0,0,1,'2026-05-24 10:26:38'),(12,'Historia',3,0,0,0,1,'2026-05-24 10:26:38'),(13,'F.C. y E.',3,0,0,0,1,'2026-05-24 10:26:38'),(14,'Educación Física',4,0,0,0,1,'2026-05-24 10:26:38'),(15,'Vida Saludable',4,0,0,0,1,'2026-05-24 10:26:38'),(16,'Socioemocional',4,0,0,0,1,'2026-05-24 10:26:38'),(17,'Higiene',NULL,0,0,1,1,'2026-05-24 10:26:38');
+INSERT INTO `materias` VALUES (2,'Lengua Materna',1,0,0,0,1,'2026-05-21 21:47:08'),(5,'Inglés',1,1,0,0,1,'2026-05-24 10:26:38'),(6,'Francés',1,0,0,0,1,'2026-05-24 10:26:38'),(7,'Artes',4,0,1,0,1,'2026-05-24 10:26:38'),(8,'Matemáticas',2,0,0,0,1,'2026-05-24 10:26:38'),(9,'Ciencias Naturales',2,0,0,0,1,'2026-05-24 10:26:38'),(10,'Tecnología',2,0,0,0,1,'2026-05-24 10:26:38'),(11,'Geografía',3,0,0,0,1,'2026-05-24 10:26:38'),(12,'Historia',3,0,0,0,1,'2026-05-24 10:26:38'),(13,'F.C. y E.',3,0,0,0,1,'2026-05-24 10:26:38'),(14,'Educación Física',4,0,0,0,1,'2026-05-24 10:26:38'),(15,'Vida Saludable',4,0,0,0,1,'2026-05-24 10:26:38'),(16,'Socioemocional',4,0,0,0,1,'2026-05-24 10:26:38'),(17,'Higiene',NULL,0,0,1,1,'2026-05-24 10:26:38');
 /*!40000 ALTER TABLE `materias` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -427,7 +566,7 @@ CREATE TABLE `periodos_apertura` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_ciclo_periodo` (`ciclo_id`,`periodo`),
   CONSTRAINT `fk_periodo_ciclo` FOREIGN KEY (`ciclo_id`) REFERENCES `ciclos_escolares` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -436,6 +575,7 @@ CREATE TABLE `periodos_apertura` (
 
 LOCK TABLES `periodos_apertura` WRITE;
 /*!40000 ALTER TABLE `periodos_apertura` DISABLE KEYS */;
+INSERT INTO `periodos_apertura` VALUES (1,1,1,1,'2026-05-24 15:05:30',NULL);
 /*!40000 ALTER TABLE `periodos_apertura` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -464,7 +604,7 @@ CREATE TABLE `profesores` (
   UNIQUE KEY `user_id` (`user_id`),
   UNIQUE KEY `curp` (`curp`),
   CONSTRAINT `fk_profesor_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -473,7 +613,7 @@ CREATE TABLE `profesores` (
 
 LOCK TABLES `profesores` WRITE;
 /*!40000 ALTER TABLE `profesores` DISABLE KEYS */;
-INSERT INTO `profesores` VALUES (1,12,'Sughey Adriana','Moreno','Arellano','MOAS820608MMSRRG04','1982-06-08','femenino','titular','7773220180','adriana23@gmail.com',1,'2026-05-24 10:06:41');
+INSERT INTO `profesores` VALUES (1,12,'Sughey Adriana','Moreno','Arellano','MOAS820608MMSRRG04','1982-06-08','femenino','titular','7773220180','adriana23@gmail.com',1,'2026-05-24 10:06:41'),(2,13,'Ana','Izquierdo','Bello',NULL,'1970-03-09','femenino','titular',NULL,NULL,1,'2026-05-28 07:28:10');
 /*!40000 ALTER TABLE `profesores` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -520,7 +660,7 @@ CREATE TABLE `users` (
   UNIQUE KEY `username` (`username`),
   KEY `rol_id` (`rol_id`),
   CONSTRAINT `users_ibfk_1` FOREIGN KEY (`rol_id`) REFERENCES `roles` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -529,7 +669,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'superadmin','$2y$10$F6bwXR9C73lmTlUAnxlme.9YDF/FLiccDp/zhLJeBzOeD6xkJPb4e',1,1,'2026-05-15 16:47:22'),(2,'morarejavieromar','$2y$10$5AIH2lcLCnlsXDyCDwafsusbSqViH.HnaSCui3SmTj5e7A9FeEY3G',2,1,'2026-05-15 17:24:12'),(4,'mormonamy','$2y$10$hhXxSIEyaxL.8BY51BXZBuHQ0oPFOLE8W3p/guM8kRFMRKAqzytX.',3,1,'2026-05-15 17:50:28'),(6,'leelynamy','$2y$10$.JpZmEjxJ2dWhk7ykonxbOZ6pXjf/JSDaSo7Bfygcde8jNIb/duLW',2,1,'2026-05-15 18:07:36'),(8,'sanarameribe','$2y$10$Z4lY3VuYUmszJhY.gfqNv.260KIJQ3I8K7Q0v9H68twC.ET0h/HMe',3,1,'2026-05-16 19:16:27'),(9,'morareanamaria','$2y$10$vwkjxH1RtOR2tSBRIUg3tudBhom1B5k5pNqppqTP84kTNjLdcqX2q',3,1,'2026-05-17 09:56:31'),(10,'morareanamaria1','$2y$10$Z7YbL3/8mWB6cyMPW1BbWelnmD27Ouob4A700062F3xdN1gzUjUci',3,1,'2026-05-17 10:02:47'),(12,'moraresugheyadriana','$2y$10$wCXHc2t1ecZEMh9uwl5SO.ULqtmRSBssZQoife.VZLux/8L7e1iq6',4,1,'2026-05-24 10:06:41');
+INSERT INTO `users` VALUES (1,'superadmin','$2y$10$F6bwXR9C73lmTlUAnxlme.9YDF/FLiccDp/zhLJeBzOeD6xkJPb4e',1,1,'2026-05-15 16:47:22'),(2,'morarejavieromar','$2y$10$5AIH2lcLCnlsXDyCDwafsusbSqViH.HnaSCui3SmTj5e7A9FeEY3G',2,1,'2026-05-15 17:24:12'),(4,'mormonamy','$2y$10$hhXxSIEyaxL.8BY51BXZBuHQ0oPFOLE8W3p/guM8kRFMRKAqzytX.',3,1,'2026-05-15 17:50:28'),(6,'leelynamy','$2y$10$.JpZmEjxJ2dWhk7ykonxbOZ6pXjf/JSDaSo7Bfygcde8jNIb/duLW',2,1,'2026-05-15 18:07:36'),(8,'sanarameribe','$2y$10$Z4lY3VuYUmszJhY.gfqNv.260KIJQ3I8K7Q0v9H68twC.ET0h/HMe',3,1,'2026-05-16 19:16:27'),(9,'morareanamaria','$2y$10$vwkjxH1RtOR2tSBRIUg3tudBhom1B5k5pNqppqTP84kTNjLdcqX2q',3,1,'2026-05-17 09:56:31'),(10,'morareanamaria1','$2y$10$Z7YbL3/8mWB6cyMPW1BbWelnmD27Ouob4A700062F3xdN1gzUjUci',3,1,'2026-05-17 10:02:47'),(12,'moraresugheyadriana','$2y$10$wCXHc2t1ecZEMh9uwl5SO.ULqtmRSBssZQoife.VZLux/8L7e1iq6',4,1,'2026-05-24 10:06:41'),(13,'izqbelana','$2y$10$P4xBHRGg.WPp3tI.Zgbs7u8Mx/AVZNctHbfaTo3YZu/LGwFjfsTgW',4,1,'2026-05-28 07:28:10');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -542,4 +682,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-05-24 10:42:07
+-- Dump completed on 2026-05-29 19:58:14

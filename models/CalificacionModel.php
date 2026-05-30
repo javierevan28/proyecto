@@ -213,4 +213,31 @@ class CalificacionModel {
         $alumnos = $this->obtenerAlumnosConCalificacion($asignacionId, $seccion, $grado, $grupo, $periodo);
         return ['alumnos' => $alumnos, 'aspectos' => []];
     }
+// models/CalificacionModel.php - Agregar al final
+
+public function obtenerTodasAsignacionesDeProfesor(int $profesorId, int $cicloId): array {
+    $stmt = $this->db->prepare("
+        SELECT a.id AS asignacion_id, a.seccion, a.grado, a.grupo,
+               m.nombre AS materia_nombre, m.es_ingles, m.es_artes, m.es_higiene,
+               am.es_titular
+        FROM asignacion_maestros am
+        JOIN asignaciones a ON a.id = am.asignacion_id
+        JOIN materias m ON m.id = a.materia_id
+        WHERE am.profesor_id = ? 
+          AND a.ciclo_id = ? 
+          AND a.activo = 1 
+          AND am.activo = 1
+        ORDER BY a.seccion, a.grado, a.grupo, a.orden
+    ");
+    $stmt->bind_param('ii', $profesorId, $cicloId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $rows = [];
+    while ($row = $res->fetch_assoc()) {
+        $rows[] = $row;
+    }
+    return $rows;
+}
+
+
 }

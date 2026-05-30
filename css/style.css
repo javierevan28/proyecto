@@ -23,6 +23,8 @@
   --color-error-tx:   #991b1b;
   --color-warn-bg:    #fef3c7;
   --color-warn-tx:    #92400e;
+  --color-info-bg:    #eff6ff;
+  --color-info-tx:    #1e3a5f;
 
   /* Badges */
   --color-badge-bg:   #dbeafe;
@@ -55,15 +57,12 @@ body {
 }
 
 /* ── Layout de página ────────────────────────────────────── */
-
-/* Centra el contenido principal con ancho máximo */
 .container {
   max-width: 1100px;
   margin: 2rem auto;
   padding: 0 1rem;
 }
 
-/* Versión angosta para formularios */
 .container--sm  { max-width: 680px; }
 .container--md  { max-width: 760px; }
 
@@ -138,9 +137,14 @@ body {
 }
 
 .alert--info {
-  background: #eff6ff;
+  background: var(--color-info-bg);
   border-left: 4px solid var(--color-accent);
-  color: var(--color-primary);
+  color: var(--color-info-tx);
+}
+
+.alert--warn {
+  background: var(--color-warn-bg);
+  color: var(--color-warn-tx);
 }
 
 /* ── Formularios ─────────────────────────────────────────── */
@@ -150,7 +154,6 @@ body {
   gap: 1rem;
 }
 
-/* Ocupa las dos columnas */
 .form-grid .full {
   grid-column: 1 / -1;
 }
@@ -193,7 +196,7 @@ body {
   color: var(--color-placeholder);
 }
 
-/* ── Botón principal ─────────────────────────────────────── */
+/* ── Botones ─────────────────────────────────────────────── */
 .btn {
   display: inline-block;
   background: var(--color-primary);
@@ -211,6 +214,50 @@ body {
 
 .btn:hover {
   background: var(--color-primary-h);
+}
+
+.btn--sm {
+  padding: .32rem .7rem;
+  font-size: .78rem;
+  margin-top: 0;
+}
+
+.btn--success {
+  background: #065f46;
+}
+
+.btn--success:hover {
+  background: #047857;
+}
+
+.btn--accent {
+  background: var(--color-accent);
+}
+
+.btn--accent:hover {
+  background: #2563eb;
+}
+
+.btn--danger {
+  background: #991b1b;
+}
+
+.btn--danger:hover {
+  background: #7f1d1d;
+}
+
+.btn--muted {
+  background: var(--color-muted);
+}
+
+.btn--muted:hover {
+  background: #475569;
+}
+
+.btn--disabled {
+  background: var(--color-placeholder);
+  cursor: not-allowed;
+  opacity: .7;
 }
 
 /* ── Tablas ──────────────────────────────────────────────── */
@@ -261,6 +308,11 @@ body {
   font-size: .75rem;
 }
 
+.badge--active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
 .badge--warn {
   background: var(--color-warn-bg);
   color: var(--color-warn-tx);
@@ -273,7 +325,6 @@ body {
   gap: 1.2rem;
 }
 
-/* Tarjeta navegable del dashboard */
 .nav-card {
   background: var(--color-surface);
   border-radius: var(--radius);
@@ -381,23 +432,95 @@ body {
   text-align: center;
 }
 
-/* ── Responsive básico ───────────────────────────────────── */
-@media (max-width: 600px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .form-grid .full {
-    grid-column: 1;
-  }
-
-  .site-header {
-    flex-direction: column;
-    gap: .5rem;
-    text-align: center;
-  }
+/* ── Ciclo banner ────────────────────────────────────────── */
+.ciclo-banner {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: .75rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: .9rem;
 }
-/* ── Modal de confirmación ───────────────────────────────────── */
+
+.ciclo-banner--warn {
+  background: var(--color-warn-bg);
+  color: var(--color-warn-tx);
+}
+
+.ciclo-banner__label {
+  flex: 1;
+}
+
+.ciclo-banner__nombre {
+  font-size: 1rem;
+  letter-spacing: .02em;
+}
+
+.ciclo-banner__link {
+  margin-left: auto;
+  color: #93c5fd;
+  font-size: .82rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ciclo-banner--warn .ciclo-banner__link {
+  color: var(--color-warn-tx);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.ciclo-banner__link:hover {
+  text-decoration: underline;
+}
+
+/* ── Checkbox con label en línea ─────────────────────────── */
+.check-option {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .5rem;
+}
+
+.check-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.check-option label {
+  font-size: .88rem;
+  color: var(--color-text);
+  cursor: pointer;
+  margin: 0;
+}
+
+/* ── Lista de checkboxes ─────────────────────────────────── */
+.check-list {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #ccd3db;
+  border-radius: var(--radius-sm);
+  padding: .5rem .75rem;
+  background: var(--color-surface);
+}
+
+/* ── Acciones en fila de tabla ───────────────────────────── */
+.table-actions {
+  display: flex;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+
+/* ── Modal de confirmación ───────────────────────────────── */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -408,7 +531,9 @@ body {
   z-index: 1000;
 }
 
-.modal-overlay[hidden] { display: none; }
+.modal-overlay[hidden] {
+  display: none;
+}
 
 .modal {
   background: var(--color-surface);
@@ -444,107 +569,226 @@ body {
   justify-content: flex-end;
 }
 
-/* ── Variantes de botón pequeño para tablas ──────────────────── */
-.btn--sm       { padding: .32rem .7rem; font-size: .78rem; margin-top: 0; }
-.btn--success  { background: #065f46; }
-.btn--success:hover { background: #047857; }
-.btn--accent   { background: var(--color-accent); }
-.btn--accent:hover  { background: #2563eb; }
-.btn--danger   { background: #991b1b; }
-.btn--danger:hover  { background: #7f1d1d; }
-.btn--disabled {
-  background: var(--color-placeholder);
-  cursor: not-allowed;
-  opacity: .7;
+.modal__confirm {
+  background: var(--color-primary);
 }
 
-.modal__cancel       { background: var(--color-muted); }
-.modal__cancel:hover { background: #475569; }
+.modal__confirm:hover {
+  background: var(--color-primary-h);
+}
 
-/* ── Acciones en fila de tabla ───────────────────────────────── */
-.table-actions {
+.modal__cancel {
+  background: var(--color-muted);
+}
+
+.modal__cancel:hover {
+  background: #475569;
+}
+
+/* ── Responsive básico ───────────────────────────────────── */
+@media (max-width: 600px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid .full {
+    grid-column: 1;
+  }
+
+  .site-header {
+    flex-direction: column;
+    gap: .5rem;
+    text-align: center;
+  }
+}
+
+/* ============================================================
+   ESTILOS PARA MÚLTIPLES MAESTROS (asignaciones.php)
+   Agregar al final de css/style.css
+   ============================================================ */
+
+/* ── Contenedor de maestros ───────────────────────────────── */
+.maestro-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+}
+
+.maestro-row select {
+    flex: 2;
+    padding: 0.4rem;
+    border: 1px solid #ccd3db;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: var(--font);
+    background: var(--color-surface);
+}
+
+.maestro-row .checkbox-titular {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    color: var(--color-muted);
+    cursor: pointer;
+}
+
+.maestro-row .checkbox-titular input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--color-primary);
+}
+
+/* ── Botón agregar maestro ────────────────────────────────── */
+.btn-add-maestro {
+    margin-top: 0.5rem;
+    width: 100%;
+    background: var(--color-accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-add-maestro:hover {
+    background: #2563eb;
+}
+
+/* ── Bloque de materia en asignaciones ────────────────────── */
+.materia-bloque {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.8rem;
+    margin-bottom: 0.8rem;
+    background: var(--color-surface);
+    transition: box-shadow 0.15s;
+}
+
+.materia-bloque:hover {
+    box-shadow: var(--shadow);
+}
+
+.materia-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+/* ── Badge especial para titular ──────────────────────────── */
+.badge-titular {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+/* ─── Responsive para maestros ────────────────────────────── */
+@media (max-width: 600px) {
+    .maestro-row {
+        flex-wrap: wrap;
+    }
+    
+    .maestro-row select {
+        flex: 1 1 100%;
+        margin-bottom: 0.3rem;
+    }
+    
+    .maestro-row .checkbox-titular {
+        flex: 1;
+    }
+    
+    .btn-add-maestro {
+        width: 100%;
+    }
+}
+
+.grupos-container {
   display: flex;
-  gap: .4rem;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.grupo-card {
+  padding: 1.2rem;
+}
+
+.grupo-header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.grupo-titulo {
+  font-size: 1rem;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
   flex-wrap: wrap;
 }
 
-/* ── Badge activo ────────────────────────────────────────────── */
-.badge--active {
+.materias-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+.materia-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  background: #f8fafc;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  transition: all 0.15s;
+  border: 1px solid var(--color-border);
+}
+
+.materia-link:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.materia-link:hover .materia-icon {
+  color: white;
+}
+
+.materia-icon {
+  font-size: 1rem;
+}
+
+.badge-titular-small {
   background: #d1fae5;
   color: #065f46;
-}
-
-/* ── Banner de ciclo activo (dashboard) ──────────────────────── */
-.ciclo-banner {
-  display: flex;
-  align-items: center;
-  gap: .75rem;
-  background: var(--color-primary);
-  color: #fff;
-  border-radius: var(--radius);
-  padding: .75rem 1.25rem;
-  margin-bottom: 1.5rem;
-  font-size: .9rem;
-}
-
-.ciclo-banner--warn {
-  background: var(--color-warn-bg);
-  color: var(--color-warn-tx);
-}
-
-.ciclo-banner__label  { flex: 1; }
-
-.ciclo-banner__nombre {
-  font-size: 1rem;
-  letter-spacing: .02em;
-}
-
-.ciclo-banner__link {
-  margin-left: auto;
-  color: #93c5fd;
-  font-size: .82rem;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.ciclo-banner--warn .ciclo-banner__link {
-  color: var(--color-warn-tx);
-  font-weight: 600;
-  text-decoration: underline;
-}
-
-.ciclo-banner__link:hover { text-decoration: underline; }
-/* ── Checkbox con label en línea ─────────────────────────────── */
-.check-option {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  margin-top: .5rem;
-}
-
-.check-option input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  cursor: pointer;
-  accent-color: var(--color-primary);
-}
-
-.check-option label {
-  font-size: .88rem;
-  color: var(--color-text);
-  cursor: pointer;
-  margin: 0;
-}
-/* ── Lista de checkboxes (maestros) ──────────────────────────── */
-.check-list {
-  display: flex;
-  flex-direction: column;
-  gap: .3rem;
-  max-height: 180px;
-  overflow-y: auto;
-  border: 1px solid #ccd3db;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
   border-radius: var(--radius-sm);
-  padding: .5rem .75rem;
-  background: var(--color-surface);
+  margin-left: auto;
+}
+
+.materia-link:hover .badge-titular-small {
+  background: white;
+  color: var(--color-primary);
+}
+
+@media (max-width: 600px) {
+  .materias-grid {
+    grid-template-columns: 1fr;
+  }
 }

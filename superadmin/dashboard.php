@@ -1,5 +1,5 @@
 <?php
-
+// superadmin/dashboard.php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../models/CicloModel.php';
@@ -19,6 +19,15 @@ include __DIR__ . '/../includes/header.php';
   <h2 class="section-title">¿Qué deseas hacer?</h2>
 
   <nav class="card-grid" aria-label="Menú del superadmin">
+
+    <!-- NUEVA TARJETA: Alta rápida Padre + Hijos -->
+    <a class="nav-card" href="alta_padre_con_hijos.php" style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5282 100%);">
+      <span class="nav-card__icon" aria-hidden="true">👨‍👩‍👧‍👦</span>
+      <h3 class="nav-card__title" style="color: white;">Alta rápida (Padre + Hijos)</h3>
+      <p class="nav-card__desc" style="color: #93c5fd;">
+        Registra un padre/tutor y hasta 6 hijos en un solo paso
+      </p>
+    </a>
 
     <a class="nav-card" href="alta_padre.php">
       <span class="nav-card__icon" aria-hidden="true">👨‍👩‍👧</span>
@@ -85,44 +94,44 @@ include __DIR__ . '/../includes/header.php';
     </a>
 
     <a class="nav-card" href="materias.php">
-  <span class="nav-card__icon" aria-hidden="true">📖</span>
-  <h3 class="nav-card__title">Materias</h3>
-  <p class="nav-card__desc">
-    Gestiona el catálogo de materias del sistema
-  </p>
-</a>
+      <span class="nav-card__icon" aria-hidden="true">📖</span>
+      <h3 class="nav-card__title">Materias</h3>
+      <p class="nav-card__desc">
+        Gestiona el catálogo de materias del sistema
+      </p>
+    </a>
 
-<a class="nav-card" href="artes_subcomponentes.php">
-  <span class="nav-card__icon" aria-hidden="true">🎨</span>
-  <h3 class="nav-card__title">Subcomponentes de Artes</h3>
-  <p class="nav-card__desc">
-    Gestiona Danza, Teatro, Dibujo, Música y Artes
-  </p>
-</a>
+    <a class="nav-card" href="artes_subcomponentes.php">
+      <span class="nav-card__icon" aria-hidden="true">🎨</span>
+      <h3 class="nav-card__title">Subcomponentes de Artes</h3>
+      <p class="nav-card__desc">
+        Gestiona Danza, Teatro, Dibujo, Música y Artes
+      </p>
+    </a>
 
-<a class="nav-card" href="asignaciones.php">
-  <span class="nav-card__icon" aria-hidden="true">🗓️</span>
-  <h3 class="nav-card__title">Asignaciones</h3>
-  <p class="nav-card__desc">
-    Asigna materias, maestros y grupos por ciclo escolar
-  </p>
-</a>
+    <a class="nav-card" href="asignaciones.php">
+      <span class="nav-card__icon" aria-hidden="true">🗓️</span>
+      <h3 class="nav-card__title">Asignaciones</h3>
+      <p class="nav-card__desc">
+        Asigna materias, maestros y grupos por ciclo escolar
+      </p>
+    </a>
 
-<a class="nav-card" href="periodos.php">
-  <span class="nav-card__icon" aria-hidden="true">🔓</span>
-  <h3 class="nav-card__title">Periodos</h3>
-  <p class="nav-card__desc">
-    Abre y cierra periodos para que los maestros capturen calificaciones
-  </p>
-</a>
+    <a class="nav-card" href="periodos.php">
+      <span class="nav-card__icon" aria-hidden="true">🔓</span>
+      <h3 class="nav-card__title">Periodos</h3>
+      <p class="nav-card__desc">
+        Abre y cierra periodos para que los maestros capturen calificaciones
+      </p>
+    </a>
 
-<a class="nav-card" href="reportes.php">
-  <span class="nav-card__icon" aria-hidden="true">📊</span>
-  <h3 class="nav-card__title">Reportes</h3>
-  <p class="nav-card__desc">
-    Consulta calificaciones por grupo, materia o campo formativo
-  </p>
-</a>
+    <a class="nav-card" href="reportes.php">
+      <span class="nav-card__icon" aria-hidden="true">📊</span>
+      <h3 class="nav-card__title">Reportes</h3>
+      <p class="nav-card__desc">
+        Consulta calificaciones por grupo, materia o campo formativo
+      </p>
+    </a>
   </nav>
 </main>
 
