@@ -792,3 +792,253 @@ body {
     grid-template-columns: 1fr;
   }
 }
+.captura-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.materias-sidebar {
+  position: sticky;
+  top: 1rem;
+}
+
+.materias-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.materia-nav-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  background: #f1f5f9;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+
+.materia-nav-link.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.materia-nav-link:hover:not(.active) {
+  background: #e2e8f0;
+}
+
+.captura-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.alumno-nombre {
+  text-align: left;
+  font-weight: 500;
+}
+
+.cal-input {
+  width: 70px;
+  padding: 0.4rem;
+  border: 1px solid #ccd3db;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.cal-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+}
+
+.promedio-cell {
+  background: #f0fdf4;
+  font-weight: 600;
+  color: #065f46;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+.upload-excel {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.upload-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 700px) {
+  .captura-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .materias-sidebar {
+    position: static;
+  }
+}
+
+/* Estilos para asignaciones */
+.materia-bloque {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.8rem;
+    margin-bottom: 0.8rem;
+    background: var(--color-surface);
+}
+
+.materia-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.maestro-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+}
+
+.maestro-row select {
+    flex: 2;
+}
+
+.maestro-row .checkbox-titular {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.btn-add-maestro {
+    margin-top: 0.5rem;
+    width: 100%;
+    background: var(--color-accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.btn-add-maestro:hover {
+    background: #2563eb;
+}
+
+@media (max-width: 600px) {
+    .maestro-row {
+        flex-wrap: wrap;
+    }
+    .maestro-row select {
+        flex: 1 1 100%;
+    }
+}
+/* Estilos específicos para asignaciones - diseño original */
+.table-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+/* Estilos para los bloques de materias dentro del formulario */
+.materia-bloque {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.8rem;
+    margin-bottom: 0.8rem;
+    background: var(--color-surface);
+}
+
+.materia-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+/* Estilos para fila de maestro */
+.maestro-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+}
+
+.maestro-row select {
+    flex: 2;
+    padding: 0.4rem;
+    border: 1px solid #ccd3db;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.maestro-row .checkbox-titular {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.btn-add-maestro {
+    margin-top: 0.5rem;
+    width: 100%;
+    background: var(--color-accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.btn-add-maestro:hover {
+    background: #2563eb;
+}
+
+/* Responsive */
+@media (max-width: 700px) {
+    .maestro-row {
+        flex-wrap: wrap;
+    }
+    
+    .maestro-row select {
+        flex: 1 1 100%;
+    }
+}
+

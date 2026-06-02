@@ -41,7 +41,6 @@ if (!$seccion || !$grado || !$grupo) {
     exit;
 }
 
-// Verificar acceso al grupo (que el profesor tenga al menos una materia en este grupo)
 $grupos      = $calModelo->obtenerGruposDeProfesor((int)$profesor['id'], (int)$cicloActivo['id']);
 $tieneAcceso = false;
 foreach ($grupos as $g) {
@@ -55,7 +54,6 @@ if (!$tieneAcceso) {
     exit;
 }
 
-// Obtener SOLO las materias donde el profesor está asignado en este grupo
 $materias      = $calModelo->obtenerMateriasDeProfesor(
     (int)$profesor['id'], (int)$cicloActivo['id'], $seccion, $grado, $grupo
 );
@@ -73,7 +71,57 @@ if ($asignacionId > 0) {
     }
 }
 
-// ── POST: guardar calificaciones ──────────────────────────────
+// Función para obtener aspectos de inglés según el grado (NO según asignación)
+function obtenerAspectosInglesPorGrado($db, $seccion, $grado) {
+    $stmt = $db->prepare("
+        SELECT id, nombre, orden FROM asignacion_ingles_aspectos 
+        WHERE seccion = ? AND grado = ? AND asignacion_id IS NULL
+        ORDER BY orden ASC
+    ");
+    $stmt->bind_param('si', $seccion, $grado);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $aspectos = [];
+    while ($row = $result->fetch_assoc()) {
+        $aspectos[] = $row;
+    }
+    return $aspectos;
+}
+
+// Función para obtener alumnos con calificaciones de inglés por aspecto
+function obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos) {
+    // Obtener alumnos del grupo
+    $stmtAl = $db->prepare("
+        SELECT al.id AS alumno_id,
+               al.nombre, al.apellido_paterno, al.apellido_materno,
+               al.matricula
+        FROM alumnos al
+        WHERE al.seccion = ? AND al.grado = ? AND al.grupo = ? AND al.activo = 1
+        ORDER BY al.apellido_paterno, al.apellido_materno, al.nombre
+    ");
+    $stmtAl->bind_param('sis', $seccion, $grado, $grupo);
+    $stmtAl->execute();
+    $alumnos = $stmtAl->get_result()->fetch_all(MYSQLI_ASSOC);
+    
+    // Para cada alumno obtener sus calificaciones por aspecto
+    foreach ($alumnos as &$alumno) {
+        $alumno['aspectos'] = [];
+        foreach ($aspectos as $asp) {
+            $stmtC = $db->prepare("
+                SELECT calificacion FROM calificaciones_ingles
+                WHERE alumno_id = ? AND aspecto_id = ? AND periodo = ?
+                LIMIT 1
+            ");
+            $stmtC->bind_param('iii', $alumno['alumno_id'], $asp['id'], $periodo);
+            $stmtC->execute();
+            $resC = $stmtC->get_result()->fetch_assoc();
+            $alumno['aspectos'][$asp['id']] = $resC['calificacion'] ?? null;
+        }
+    }
+    
+    return ['aspectos' => $aspectos, 'alumnos' => $alumnos];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $materiaActual) {
     if ((int)$materiaActual['es_ingles']) {
         $resultado = $calModelo->guardarCalificacionesIngles(
@@ -91,8 +139,10 @@ $aspectos = [];
 
 if ($materiaActual) {
     if ((int)$materiaActual['es_ingles']) {
-        $datos    = $calModelo->obtenerAlumnosIngles($asignacionId, $seccion, $grado, $grupo, $periodo);
-        $alumnos  = $datos['alumnos'];
+        // Obtener aspectos según el GRADO (no según asignación)
+        $aspectos = obtenerAspectosInglesPorGrado($db, $seccion, $grado);
+        $datos = obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos);
+        $alumnos = $datos['alumnos'];
         $aspectos = $datos['aspectos'];
     } else {
         $alumnos = $calModelo->obtenerAlumnosConCalificacion($asignacionId, $seccion, $grado, $grupo, $periodo);
@@ -131,8 +181,6 @@ include __DIR__ . '/../includes/header.php';
   <?php endif; ?>
 
   <div class="captura-layout">
-
-    <!-- ── Menú de materias (solo las que imparte) ─────────────── -->
     <aside class="materias-sidebar">
       <div class="card">
         <h3 class="section-title" style="font-size:1rem;">Mis materias</h3>
@@ -151,7 +199,6 @@ include __DIR__ . '/../includes/header.php';
       </div>
     </aside>
 
-    <!-- ── Tabla de captura ──────────────────────────────────── -->
     <section class="captura-main">
       <?php if (!$materiaActual): ?>
         <div class="card">
@@ -168,7 +215,7 @@ include __DIR__ . '/../includes/header.php';
           <div class="captura-header">
             <h2 class="section-title" style="margin:0;">
               <?= htmlspecialchars($materiaActual['materia_nombre']) ?>
-              <span class="badge" style="background:var(--color-primary); color:white;"><?= count($alumnos) ?> alumnos</span>
+              <span class="badge"><?= count($alumnos) ?> alumnos</span>
             </h2>
             <a class="btn btn--sm btn--accent"
                href="exportar_excel.php?asignacion_id=<?= $asignacionId ?>&seccion=<?= $seccion ?>&grado=<?= $grado ?>&grupo=<?= $grupo ?>&periodo=<?= $periodo ?>&es_ingles=<?= $materiaActual['es_ingles'] ?>">
@@ -204,7 +251,7 @@ include __DIR__ . '/../includes/header.php';
                       ?>
                       <tr>
                         <td><?= $i + 1 ?></td>
-                        <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
+                        <td><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
                         <?php foreach ($aspectos as $asp): ?>
                           <td>
                             <input type="number"
@@ -214,7 +261,7 @@ include __DIR__ . '/../includes/header.php';
                                    class="cal-input">
                           </td>
                         <?php endforeach; ?>
-                        <td class="promedio-cell"><strong><?= $promedio ?></strong></td>
+                        <td><strong><?= $promedio ?></strong></td>
                       </tr>
                     <?php endforeach; ?>
                   </tbody>
@@ -236,7 +283,7 @@ include __DIR__ . '/../includes/header.php';
                     <?php foreach ($alumnos as $i => $al): ?>
                       <tr>
                         <td><?= $i + 1 ?></td>
-                        <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
+                        <td><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
                         <td><span class="badge"><?= htmlspecialchars($al['matricula'] ?? '—') ?></span></td>
                         <td>
                           <input type="number"
@@ -255,7 +302,6 @@ include __DIR__ . '/../includes/header.php';
             <button class="btn" type="submit">💾 Guardar calificaciones</button>
           </form>
 
-          <!-- Subir Excel -->
           <div class="upload-excel">
             <p class="form-hint">También puedes llenar el Excel descargado y subirlo aquí:</p>
             <form method="POST" action="importar_excel.php" enctype="multipart/form-data">
@@ -268,118 +314,10 @@ include __DIR__ . '/../includes/header.php';
               </div>
             </form>
           </div>
-
         </div>
       <?php endif; ?>
     </section>
-
   </div>
 </main>
-
-<style>
-.captura-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.materias-sidebar {
-  position: sticky;
-  top: 1rem;
-}
-
-.materias-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.materia-nav-link {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.6rem 0.8rem;
-  background: #f1f5f9;
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-  color: var(--color-text);
-  font-size: 0.85rem;
-  transition: all 0.15s;
-}
-
-.materia-nav-link.active {
-  background: var(--color-primary);
-  color: white;
-}
-
-.materia-nav-link:hover:not(.active) {
-  background: #e2e8f0;
-}
-
-.captura-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.alumno-nombre {
-  text-align: left;
-  font-weight: 500;
-}
-
-.cal-input {
-  width: 70px;
-  padding: 0.4rem;
-  border: 1px solid #ccd3db;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  text-align: center;
-}
-
-.cal-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
-}
-
-.promedio-cell {
-  background: #f0fdf4;
-  font-weight: 600;
-  color: #065f46;
-}
-
-.table-responsive {
-  overflow-x: auto;
-  margin-bottom: 1.5rem;
-}
-
-.upload-excel {
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.upload-row {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
-}
-
-@media (max-width: 700px) {
-  .captura-layout {
-    grid-template-columns: 1fr;
-  }
-  
-  .materias-sidebar {
-    position: static;
-  }
-}
-</style>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

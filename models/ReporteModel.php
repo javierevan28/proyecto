@@ -20,17 +20,53 @@ class ReporteModel {
 
     private function obtenerCal(int $alumnoId, int $asigId, int $periodo, bool $esIngles): ?float {
         if ($esIngles) {
-            $stmt = $this->db->prepare("
-                SELECT AVG(ci.calificacion) AS promedio
-                FROM calificaciones_ingles ci
-                JOIN asignacion_ingles_aspectos aia ON aia.id = ci.aspecto_id
-                WHERE aia.asignacion_id = ? AND ci.alumno_id = ? AND ci.periodo = ?
+            // Obtener la sección y grado de la asignación
+            $stmtAsig = $this->db->prepare("
+                SELECT seccion, grado FROM asignaciones WHERE id = ? LIMIT 1
             ");
-            $stmt->bind_param('iii', $asigId, $alumnoId, $periodo);
-            $stmt->execute();
-            $res = $stmt->get_result()->fetch_assoc();
-            return $res['promedio'] !== null ? round((float)$res['promedio'], 1) : null;
+            $stmtAsig->bind_param('i', $asigId);
+            $stmtAsig->execute();
+            $asignacion = $stmtAsig->get_result()->fetch_assoc();
+            
+            if (!$asignacion) {
+                return null;
+            }
+            
+            // Obtener los aspectos según sección y grado (asignacion_id IS NULL)
+            $stmtAsp = $this->db->prepare("
+                SELECT id FROM asignacion_ingles_aspectos 
+                WHERE seccion = ? AND grado = ? AND asignacion_id IS NULL AND activo = 1
+                ORDER BY orden ASC
+            ");
+            $stmtAsp->bind_param('si', $asignacion['seccion'], $asignacion['grado']);
+            $stmtAsp->execute();
+            $aspectos = $stmtAsp->get_result()->fetch_all(MYSQLI_ASSOC);
+            
+            if (empty($aspectos)) {
+                return null;
+            }
+            
+            // Calcular promedio de todos los aspectos
+            $suma = 0;
+            $count = 0;
+            foreach ($aspectos as $asp) {
+                $stmtC = $this->db->prepare("
+                    SELECT calificacion FROM calificaciones_ingles
+                    WHERE alumno_id = ? AND aspecto_id = ? AND periodo = ?
+                ");
+                $stmtC->bind_param('iii', $alumnoId, $asp['id'], $periodo);
+                $stmtC->execute();
+                $res = $stmtC->get_result()->fetch_assoc();
+                if ($res && $res['calificacion'] !== null) {
+                    $suma += $res['calificacion'];
+                    $count++;
+                }
+            }
+            
+            return $count > 0 ? round($suma / $count, 1) : null;
         }
+        
+        // Materia normal
         $stmt = $this->db->prepare("
             SELECT calificacion FROM calificaciones
             WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ? LIMIT 1
@@ -59,12 +95,6 @@ class ReporteModel {
         return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 
-    // ----------------------------------------------------------
-    // Reporte principal
-    // $vista       = 'periodo' | 'trimestre'
-    // $agrupacion  = 'materia' | 'campo'
-    // $seleccion   = 'todos' | '1'..'6' (periodos) | '1'..'3' (trimestres)
-    // ----------------------------------------------------------
     public function obtenerReporte(
         int    $cicloId,
         string $seccion,
@@ -72,12 +102,11 @@ class ReporteModel {
         string $grupo,
         string $vista,
         string $agrupacion,
-        string $seleccion    // 'todos' | número
+        string $seleccion
     ): array {
 
         $periodosAb = $this->periodosAbiertos($cicloId);
 
-        // Definir qué columnas de tiempo mostrar
         if ($vista === 'periodo') {
             $maxCols = 6;
             $colsTodos = [1, 2, 3, 4, 5, 6];
@@ -94,7 +123,7 @@ class ReporteModel {
         $stmtAl = $this->db->prepare("
             SELECT id AS alumno_id, nombre, apellido_paterno, apellido_materno, matricula
             FROM alumnos
-            WHERE seccion = ? AND grado = ? AND grupo = ?
+            WHERE seccion = ? AND grado = ? AND grupo = ? AND activo = 1
             ORDER BY apellido_paterno, apellido_materno, nombre
         ");
         $stmtAl->bind_param('sis', $seccion, $grado, $grupo);
@@ -110,7 +139,7 @@ class ReporteModel {
                    cf.nombre AS campo_nombre,
                    cf.orden  AS campo_orden
             FROM asignaciones a
-            JOIN materias           m  ON m.id  = a.materia_id
+            JOIN materias m ON m.id = a.materia_id
             LEFT JOIN campos_formativos cf ON cf.id = a.campo_formativo_id
             WHERE a.ciclo_id = ? AND a.seccion = ? AND a.grado = ? AND a.grupo = ? AND a.activo = 1
             ORDER BY cf.orden ASC, a.orden ASC
@@ -119,7 +148,6 @@ class ReporteModel {
         $stmtAsig->execute();
         $asignaciones = $stmtAsig->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        // Para cada alumno calcular valores
         foreach ($alumnos as &$al) {
             $al['columnas'] = [];
 
@@ -128,7 +156,6 @@ class ReporteModel {
                     $asigId   = (int)$asig['asignacion_id'];
                     $esIngles = (int)$asig['es_ingles'] === 1;
 
-                    // Calcular los 6 periodos siempre (para poder calcular trimestres)
                     $cals = [];
                     for ($p = 1; $p <= 6; $p++) {
                         $cals[$p] = in_array($p, $periodosAb)
@@ -141,7 +168,6 @@ class ReporteModel {
                         $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
                     }
 
-                    // Filtrar solo las columnas seleccionadas
                     $valoresFiltrados = [];
                     foreach ($colsSeleccionadas as $col) {
                         $valoresFiltrados[$col] = $vista === 'periodo'
@@ -196,7 +222,6 @@ class ReporteModel {
                         $promTrims[$t] = $this->calcTrimestre($promCals[$t*2-1], $promCals[$t*2]);
                     }
 
-                    // Filtrar columnas seleccionadas
                     $valoresFiltrados = [];
                     foreach ($colsSeleccionadas as $col) {
                         $valoresFiltrados[$col] = $vista === 'periodo'
@@ -211,7 +236,7 @@ class ReporteModel {
                 }
             }
 
-            // Promedio general — solo con los valores seleccionados
+            // Promedio general
             $todosLosValores = [];
             foreach ($al['columnas'] as $col) {
                 foreach ($col['valor'] as $v) {
@@ -247,7 +272,6 @@ class ReporteModel {
             }
         }
 
-        // Etiquetas de columnas de tiempo
         $etiquetasCols = [];
         foreach ($colsSeleccionadas as $col) {
             $etiquetasCols[$col] = ($vista === 'periodo' ? 'P' : 'T') . $col;
@@ -265,3 +289,4 @@ class ReporteModel {
         ];
     }
 }
+?>
