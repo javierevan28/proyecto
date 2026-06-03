@@ -20,7 +20,6 @@ class ReporteModel {
 
     private function obtenerCal(int $alumnoId, int $asigId, int $periodo, bool $esIngles): ?float {
         if ($esIngles) {
-            // Obtener la sección y grado de la asignación
             $stmtAsig = $this->db->prepare("
                 SELECT seccion, grado FROM asignaciones WHERE id = ? LIMIT 1
             ");
@@ -32,7 +31,6 @@ class ReporteModel {
                 return null;
             }
             
-            // Obtener los aspectos según sección y grado (asignacion_id IS NULL)
             $stmtAsp = $this->db->prepare("
                 SELECT id FROM asignacion_ingles_aspectos 
                 WHERE seccion = ? AND grado = ? AND asignacion_id IS NULL AND activo = 1
@@ -46,7 +44,6 @@ class ReporteModel {
                 return null;
             }
             
-            // Calcular promedio de todos los aspectos
             $suma = 0;
             $count = 0;
             foreach ($aspectos as $asp) {
@@ -66,7 +63,6 @@ class ReporteModel {
             return $count > 0 ? round($suma / $count, 1) : null;
         }
         
-        // Materia normal
         $stmt = $this->db->prepare("
             SELECT calificacion FROM calificaciones
             WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ? LIMIT 1
@@ -75,6 +71,45 @@ class ReporteModel {
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
         return $res && $res['calificacion'] !== null ? (float)$res['calificacion'] : null;
+    }
+
+    private function obtenerPromedioArtes(int $alumnoId, int $cicloId, string $seccion, int $grado, string $grupo, int $periodo): ?float {
+        // Obtener las asignaciones de Artes para este grupo específico
+        $stmt = $this->db->prepare("
+            SELECT a.id as asignacion_id, m.nombre
+            FROM asignaciones a
+            JOIN materias m ON m.id = a.materia_id
+            WHERE a.seccion = ? AND a.grado = ? AND a.grupo = ? 
+              AND a.ciclo_id = ? AND m.es_artes = 1 AND a.activo = 1
+            ORDER BY a.orden ASC
+        ");
+        $stmt->bind_param('sisi', $seccion, $grado, $grupo, $cicloId);
+        $stmt->execute();
+        $asignacionesArtes = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        
+        if (empty($asignacionesArtes)) {
+            return null;
+        }
+        
+        $suma = 0;
+        $count = 0;
+        
+        foreach ($asignacionesArtes as $asig) {
+            $stmtCal = $this->db->prepare("
+                SELECT calificacion FROM calificaciones_artes
+                WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ?
+            ");
+            $stmtCal->bind_param('iii', $alumnoId, $asig['asignacion_id'], $periodo);
+            $stmtCal->execute();
+            $res = $stmtCal->get_result()->fetch_assoc();
+            
+            if ($res && $res['calificacion'] !== null) {
+                $suma += $res['calificacion'];
+                $count++;
+            }
+        }
+        
+        return $count > 0 ? round($suma / $count, 1) : null;
     }
 
     private function calcTrimestre(?float $p1, ?float $p2): ?float {
@@ -108,10 +143,8 @@ class ReporteModel {
         $periodosAb = $this->periodosAbiertos($cicloId);
 
         if ($vista === 'periodo') {
-            $maxCols = 6;
             $colsTodos = [1, 2, 3, 4, 5, 6];
         } else {
-            $maxCols = 3;
             $colsTodos = [1, 2, 3];
         }
 
@@ -119,7 +152,6 @@ class ReporteModel {
             ? $colsTodos
             : [(int)$seleccion];
 
-        // Alumnos del grupo
         $stmtAl = $this->db->prepare("
             SELECT id AS alumno_id, nombre, apellido_paterno, apellido_materno, matricula
             FROM alumnos
@@ -130,7 +162,6 @@ class ReporteModel {
         $stmtAl->execute();
         $alumnos = $stmtAl->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        // Asignaciones del grupo
         $stmtAsig = $this->db->prepare("
             SELECT a.id AS asignacion_id, a.orden,
                    m.nombre AS materia_nombre,
@@ -148,13 +179,28 @@ class ReporteModel {
         $stmtAsig->execute();
         $asignaciones = $stmtAsig->get_result()->fetch_all(MYSQLI_ASSOC);
 
+        // Verificar si hay materias de Artes en este grado
+        $hayArtes = false;
+        foreach ($asignaciones as $asig) {
+            if ((int)$asig['es_artes'] === 1) {
+                $hayArtes = true;
+                break;
+            }
+        }
+
         foreach ($alumnos as &$al) {
             $al['columnas'] = [];
 
             if ($agrupacion === 'materia') {
+                // Materias normales (no Artes)
                 foreach ($asignaciones as $asig) {
                     $asigId   = (int)$asig['asignacion_id'];
                     $esIngles = (int)$asig['es_ingles'] === 1;
+                    $esArtes = (int)$asig['es_artes'] === 1;
+
+                    if ($esArtes) {
+                        continue;
+                    }
 
                     $cals = [];
                     for ($p = 1; $p <= 6; $p++) {
@@ -180,18 +226,52 @@ class ReporteModel {
                         'valor'  => $valoresFiltrados,
                     ];
                 }
+                
+                // Agregar columna de Artes (promedio de todas las materias de Artes)
+                if ($hayArtes) {
+                    $calsArtes = [];
+                    for ($p = 1; $p <= 6; $p++) {
+                        $calsArtes[$p] = in_array($p, $periodosAb)
+                            ? $this->obtenerPromedioArtes($al['alumno_id'], $cicloId, $seccion, $grado, $grupo, $p)
+                            : null;
+                    }
+                    
+                    $trimsArtes = [];
+                    for ($t = 1; $t <= 3; $t++) {
+                        $trimsArtes[$t] = $this->calcTrimestre($calsArtes[$t*2-1], $calsArtes[$t*2]);
+                    }
+                    
+                    $valoresArtes = [];
+                    foreach ($colsSeleccionadas as $col) {
+                        $valoresArtes[$col] = $vista === 'periodo'
+                            ? $calsArtes[$col]
+                            : $trimsArtes[$col];
+                    }
+                    
+                    $al['columnas'][] = [
+                        'key'    => 'artes',
+                        'valor'  => $valoresArtes,
+                    ];
+                }
 
             } else {
                 // Agrupar por campo formativo
                 $porCampo = [];
+                
                 foreach ($asignaciones as $asig) {
                     $campoKey = $asig['campo_id'] ?? 'sin_campo';
                     $asigId   = (int)$asig['asignacion_id'];
                     $esIngles = (int)$asig['es_ingles'] === 1;
+                    $esArtes = (int)$asig['es_artes'] === 1;
+
+                    if ($esArtes) {
+                        continue;
+                    }
 
                     if (!isset($porCampo[$campoKey])) {
                         $porCampo[$campoKey] = [
                             'campo_nombre'  => $asig['campo_nombre'] ?? 'Sin campo',
+                            'campo_id'      => $campoKey,
                             'materias_cals' => [],
                         ];
                     }
@@ -205,16 +285,35 @@ class ReporteModel {
                     $porCampo[$campoKey]['materias_cals'][] = $cals;
                 }
 
+                // Agregar campo de Artes si existe
+                if ($hayArtes) {
+                    $porCampo['artes'] = [
+                        'campo_nombre' => 'DE LO HUMANO Y LO COMUNITARIO',
+                        'campo_id' => 4,
+                        'materias_cals' => [],
+                        'es_artes' => true
+                    ];
+                }
+
                 foreach ($porCampo as $campoKey => $campoData) {
-                    $promCals = [];
-                    for ($p = 1; $p <= 6; $p++) {
-                        $vals = array_filter(
-                            array_column($campoData['materias_cals'], $p),
-                            fn($v) => $v !== null
-                        );
-                        $promCals[$p] = count($vals) > 0
-                            ? round(array_sum($vals) / count($vals), 1)
-                            : null;
+                    if (isset($campoData['es_artes']) && $campoData['es_artes'] === true) {
+                        $promCals = [];
+                        for ($p = 1; $p <= 6; $p++) {
+                            $promCals[$p] = in_array($p, $periodosAb)
+                                ? $this->obtenerPromedioArtes($al['alumno_id'], $cicloId, $seccion, $grado, $grupo, $p)
+                                : null;
+                        }
+                    } else {
+                        $promCals = [];
+                        for ($p = 1; $p <= 6; $p++) {
+                            $vals = array_filter(
+                                array_column($campoData['materias_cals'], $p),
+                                fn($v) => $v !== null
+                            );
+                            $promCals[$p] = count($vals) > 0
+                                ? round(array_sum($vals) / count($vals), 1)
+                                : null;
+                        }
                     }
 
                     $promTrims = [];
@@ -236,7 +335,6 @@ class ReporteModel {
                 }
             }
 
-            // Promedio general
             $todosLosValores = [];
             foreach ($al['columnas'] as $col) {
                 foreach ($col['valor'] as $v) {
@@ -249,18 +347,25 @@ class ReporteModel {
         }
         unset($al);
 
-        // Encabezados de columnas
         $encabezados = [];
         if ($agrupacion === 'materia') {
             foreach ($asignaciones as $asig) {
+                if ((int)$asig['es_artes'] === 1) continue;
                 $encabezados[] = [
                     'key'   => 'asig_' . $asig['asignacion_id'],
                     'label' => $asig['materia_nombre'],
                 ];
             }
+            if ($hayArtes) {
+                $encabezados[] = [
+                    'key'   => 'artes',
+                    'label' => 'Artes',
+                ];
+            }
         } else {
             $camposVistos = [];
             foreach ($asignaciones as $asig) {
+                if ((int)$asig['es_artes'] === 1) continue;
                 $campoKey = $asig['campo_id'] ?? 'sin_campo';
                 if (!isset($camposVistos[$campoKey])) {
                     $camposVistos[$campoKey] = true;
@@ -269,6 +374,12 @@ class ReporteModel {
                         'label' => $asig['campo_nombre'] ?? 'Sin campo',
                     ];
                 }
+            }
+            if ($hayArtes && !isset($camposVistos['artes'])) {
+                $encabezados[] = [
+                    'key'   => 'campo_artes',
+                    'label' => 'DE LO HUMANO Y LO COMUNITARIO',
+                ];
             }
         }
 

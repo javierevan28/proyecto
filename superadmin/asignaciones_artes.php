@@ -69,7 +69,7 @@ foreach ($todasAsignaciones as $key => $grupo) {
     }
 }
 
-// Obtener materias de Artes por grado si ya hay selección
+// Obtener materias por grado si ya hay selección
 $seccionSeleccionada = $_GET['seccion'] ?? '';
 $gradoSeleccionado = $_GET['grado'] ?? '';
 $grupoSeleccionado = $_GET['grupo'] ?? '';
@@ -182,17 +182,16 @@ include __DIR__ . '/../includes/header.php';
 
             <hr class="separator">
             <p class="form-hint" style="margin-bottom:.8rem;">
-              Selecciona las materias y asigna un maestro (cocurriculares):
+              Selecciona las materias y asigna un maestro a cada una:
             </p>
             
             <?php if (empty($materiasDelGrado)): ?>
-              <p class="alert alert--warn">No hay materias de Artes asignadas a este grado. Ve a "Materias por grado" y asigna las materias correspondientes.</p>
+              <p class="alert alert--warn">No hay materias de Artes asignadas a este grado. Ve a "Materias por grado" y asigna materias primero.</p>
             <?php else: ?>
               <?php foreach ($materiasDelGrado as $m): ?>
                 <div class="materia-bloque">
                   <div class="materia-header">
                     <strong><?= htmlspecialchars($m['nombre']) ?></strong>
-                    <span class="badge">Artes</span>
                   </div>
                   <div class="form-group">
                     <label class="form-hint">Maestro asignado</label>
@@ -254,7 +253,6 @@ include __DIR__ . '/../includes/header.php';
                     <tr>
                       <td>
                         <strong><?= $nombreSafe ?></strong>
-                        <span class="badge">Artes</span>
                         <?php if ((int)($a['hay_titular'] ?? 0)): ?>
                           <span class="badge badge--active">Titular</span>
                         <?php endif; ?>

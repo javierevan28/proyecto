@@ -71,11 +71,11 @@ if ($asignacionId > 0) {
     }
 }
 
-// Función para obtener aspectos de inglés según el grado (NO según asignación)
+// Función para obtener aspectos de inglés según el grado
 function obtenerAspectosInglesPorGrado($db, $seccion, $grado) {
     $stmt = $db->prepare("
         SELECT id, nombre, orden FROM asignacion_ingles_aspectos 
-        WHERE seccion = ? AND grado = ? AND asignacion_id IS NULL
+        WHERE seccion = ? AND grado = ? AND asignacion_id IS NULL AND activo = 1
         ORDER BY orden ASC
     ");
     $stmt->bind_param('si', $seccion, $grado);
@@ -88,9 +88,8 @@ function obtenerAspectosInglesPorGrado($db, $seccion, $grado) {
     return $aspectos;
 }
 
-// Función para obtener alumnos con calificaciones de inglés por aspecto
+// Función para obtener alumnos con calificaciones de inglés por grado
 function obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos) {
-    // Obtener alumnos del grupo
     $stmtAl = $db->prepare("
         SELECT al.id AS alumno_id,
                al.nombre, al.apellido_paterno, al.apellido_materno,
@@ -103,7 +102,6 @@ function obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $gru
     $stmtAl->execute();
     $alumnos = $stmtAl->get_result()->fetch_all(MYSQLI_ASSOC);
     
-    // Para cada alumno obtener sus calificaciones por aspecto
     foreach ($alumnos as &$alumno) {
         $alumno['aspectos'] = [];
         foreach ($aspectos as $asp) {
@@ -127,6 +125,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $materiaActual) {
         $resultado = $calModelo->guardarCalificacionesIngles(
             $periodo, (int)$profesor['id'], $_POST['cal_ingles'] ?? []
         );
+    } elseif ((int)$materiaActual['es_artes']) {
+        $resultado = $calModelo->guardarCalificacionesArtes(
+            $asignacionId, $periodo, (int)$profesor['id'], $_POST['cal'] ?? []
+        );
     } else {
         $resultado = $calModelo->guardarCalificaciones(
             $asignacionId, $periodo, (int)$profesor['id'], $_POST['cal'] ?? []
@@ -139,11 +141,12 @@ $aspectos = [];
 
 if ($materiaActual) {
     if ((int)$materiaActual['es_ingles']) {
-        // Obtener aspectos según el GRADO (no según asignación)
         $aspectos = obtenerAspectosInglesPorGrado($db, $seccion, $grado);
         $datos = obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos);
         $alumnos = $datos['alumnos'];
         $aspectos = $datos['aspectos'];
+    } elseif ((int)$materiaActual['es_artes']) {
+        $alumnos = $calModelo->obtenerAlumnosConCalificacionArtes($asignacionId, $seccion, $grado, $grupo, $periodo);
     } else {
         $alumnos = $calModelo->obtenerAlumnosConCalificacion($asignacionId, $seccion, $grado, $grupo, $periodo);
     }
@@ -218,7 +221,7 @@ include __DIR__ . '/../includes/header.php';
               <span class="badge"><?= count($alumnos) ?> alumnos</span>
             </h2>
             <a class="btn btn--sm btn--accent"
-               href="exportar_excel.php?asignacion_id=<?= $asignacionId ?>&seccion=<?= $seccion ?>&grado=<?= $grado ?>&grupo=<?= $grupo ?>&periodo=<?= $periodo ?>&es_ingles=<?= $materiaActual['es_ingles'] ?>">
+               href="exportar_excel.php?asignacion_id=<?= $asignacionId ?>&seccion=<?= $seccion ?>&grado=<?= $grado ?>&grupo=<?= $grupo ?>&periodo=<?= $periodo ?>&es_ingles=<?= $materiaActual['es_ingles'] ?>&es_artes=<?= $materiaActual['es_artes'] ?>">
               ⬇ Descargar Excel
             </a>
           </div>
@@ -251,7 +254,7 @@ include __DIR__ . '/../includes/header.php';
                       ?>
                       <tr>
                         <td><?= $i + 1 ?></td>
-                        <td><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
+                        <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
                         <?php foreach ($aspectos as $asp): ?>
                           <td>
                             <input type="number"
@@ -261,7 +264,7 @@ include __DIR__ . '/../includes/header.php';
                                    class="cal-input">
                           </td>
                         <?php endforeach; ?>
-                        <td><strong><?= $promedio ?></strong></td>
+                        <td class="promedio-cell"><strong><?= $promedio ?></strong></td>
                       </tr>
                     <?php endforeach; ?>
                   </tbody>
@@ -283,7 +286,7 @@ include __DIR__ . '/../includes/header.php';
                     <?php foreach ($alumnos as $i => $al): ?>
                       <tr>
                         <td><?= $i + 1 ?></td>
-                        <td><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
+                        <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
                         <td><span class="badge"><?= htmlspecialchars($al['matricula'] ?? '—') ?></span></td>
                         <td>
                           <input type="number"
@@ -308,6 +311,7 @@ include __DIR__ . '/../includes/header.php';
               <input type="hidden" name="asignacion_id" value="<?= $asignacionId ?>">
               <input type="hidden" name="periodo" value="<?= $periodo ?>">
               <input type="hidden" name="es_ingles" value="<?= $materiaActual['es_ingles'] ?>">
+              <input type="hidden" name="es_artes" value="<?= $materiaActual['es_artes'] ?>">
               <div class="upload-row">
                 <input type="file" name="archivo_excel" accept=".xlsx,.xls">
                 <button class="btn btn--sm btn--success" type="submit">⬆ Subir Excel</button>
