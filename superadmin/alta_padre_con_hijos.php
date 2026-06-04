@@ -49,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'grado' => $_POST["hijo_grado_$i"] ?? 0,
                     'grupo' => $_POST["hijo_grupo_$i"] ?? '',
                     'seccion' => $_POST["hijo_seccion_$i"] ?? '',
+                    'estatus' => $_POST["hijo_estatus_$i"] ?? 'regular', // Nuevo campo estatus
                     'padre_id' => $padreId,
                 ];
                 
@@ -127,6 +128,17 @@ include __DIR__ . '/../includes/header.php';
     .seccion-preescolar { background: #d1fae5; color: #065f46; }
     .seccion-primaria { background: #dbeafe; color: #1d4ed8; }
     .seccion-secundaria { background: #e0e7ff; color: #3730a3; }
+    .estatus-badge {
+        display: inline-block;
+        font-size: 0.65rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: var(--radius-sm);
+        margin-left: 0.5rem;
+    }
+    .estatus-nuevo_ingreso { background: #d1fae5; color: #065f46; }
+    .estatus-reinscripcion { background: #dbeafe; color: #1d4ed8; }
+    .estatus-regular { background: #e0e7ff; color: #3730a3; }
+    .estatus-baja { background: #fee2e2; color: #991b1b; }
 </style>
 
 <main class="container">
@@ -306,6 +318,13 @@ const GENEROS = [
     { value: 'otro', label: 'Otro' }
 ];
 
+const ESTATUS = [
+    { value: 'nuevo_ingreso', label: '🆕 Nuevo Ingreso', class: 'estatus-nuevo_ingreso' },
+    { value: 'reinscripcion', label: '🔄 Reinscripción', class: 'estatus-reinscripcion' },
+    { value: 'regular', label: '✅ Regular', class: 'estatus-regular' },
+    { value: 'baja', label: '❌ Baja', class: 'estatus-baja' }
+];
+
 // Función para obtener el badge de sección
 function getSeccionBadge(seccion) {
     const clases = {
@@ -315,6 +334,15 @@ function getSeccionBadge(seccion) {
         'secundaria': 'seccion-secundaria'
     };
     return `<span class="seccion-badge ${clases[seccion] || ''}">${seccion.charAt(0).toUpperCase() + seccion.slice(1)}</span>`;
+}
+
+// Función para obtener el badge de estatus
+function getEstatusBadge(estatus) {
+    const est = ESTATUS.find(e => e.value === estatus);
+    if (est) {
+        return `<span class="estatus-badge ${est.class}">${est.label}</span>`;
+    }
+    return '';
 }
 
 // Función para generar el HTML de un hijo
@@ -328,31 +356,33 @@ function generarHijoHTML(index, datos = null) {
         genero: '',
         grado: '',
         grupo: '',
-        seccion: ''
+        seccion: '',
+        estatus: 'regular'
     };
     
-    // Opciones de grado
     let gradoOptions = '<option value="">Selecciona…</option>';
     GRADOS.forEach(g => {
         gradoOptions += `<option value="${g}" ${defaultData.grado == g ? 'selected' : ''}>${g}°</option>`;
     });
     
-    // Opciones de grupo
     let grupoOptions = '<option value="">Selecciona…</option>';
     GRUPOS.forEach(g => {
         grupoOptions += `<option value="${g}" ${defaultData.grupo === g ? 'selected' : ''}>${g}</option>`;
     });
     
-    // Opciones de género
     let generoOptions = '<option value="">Selecciona…</option>';
     GENEROS.forEach(g => {
         generoOptions += `<option value="${g.value}" ${defaultData.genero === g.value ? 'selected' : ''}>${g.label}</option>`;
     });
     
-    // Opciones de sección
     let seccionOptions = '<option value="">Selecciona…</option>';
     SECCIONES.forEach(s => {
         seccionOptions += `<option value="${s.value}" ${defaultData.seccion === s.value ? 'selected' : ''}>${s.label}</option>`;
+    });
+    
+    let estatusOptions = '<option value="">Selecciona…</option>';
+    ESTATUS.forEach(e => {
+        estatusOptions += `<option value="${e.value}" ${defaultData.estatus === e.value ? 'selected' : ''}>${e.label}</option>`;
     });
     
     return `
@@ -361,6 +391,7 @@ function generarHijoHTML(index, datos = null) {
                 <span class="hijo-card__title">
                     🧒 Hijo #${index}
                     <span id="seccion-badge-${index}" style="display: none;"></span>
+                    <span id="estatus-badge-${index}" style="display: none;"></span>
                 </span>
                 <button type="button" class="btn-remove-hijo" onclick="removerHijo(${index})">✕ Eliminar</button>
             </div>
@@ -414,6 +445,14 @@ function generarHijoHTML(index, datos = null) {
                 </div>
                 
                 <div class="form-group">
+                    <label for="hijo_estatus_${index}">Estatus *</label>
+                    <select id="hijo_estatus_${index}" name="hijo_estatus_${index}" 
+                            required onchange="actualizarBadgeEstatus(${index}, this.value)">
+                        ${estatusOptions}
+                    </select>
+                </div>
+                
+                <div class="form-group">
                     <label for="hijo_seccion_${index}">Sección *</label>
                     <select id="hijo_seccion_${index}" name="hijo_seccion_${index}" 
                             required onchange="actualizarBadgeSeccion(${index}, this.value)">
@@ -439,7 +478,6 @@ function generarHijoHTML(index, datos = null) {
     `;
 }
 
-// Función para escapar HTML
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>]/g, function(m) {
@@ -450,7 +488,6 @@ function escapeHtml(str) {
     });
 }
 
-// Función para actualizar el badge de sección
 function actualizarBadgeSeccion(index, seccion) {
     const badgeSpan = document.getElementById(`seccion-badge-${index}`);
     if (badgeSpan) {
@@ -470,24 +507,42 @@ function actualizarBadgeSeccion(index, seccion) {
     }
 }
 
-// Función para actualizar todos los badges después de cargar
-function actualizarTodosLosBadges() {
-    for (let i = 1; i <= 6; i++) {
-        const select = document.getElementById(`hijo_seccion_${i}`);
-        if (select) {
-            actualizarBadgeSeccion(i, select.value);
+function actualizarBadgeEstatus(index, estatus) {
+    const badgeSpan = document.getElementById(`estatus-badge-${index}`);
+    if (badgeSpan) {
+        if (estatus) {
+            const est = ESTATUS.find(e => e.value === estatus);
+            if (est) {
+                badgeSpan.innerHTML = `<span class="estatus-badge ${est.class}">${est.label}</span>`;
+                badgeSpan.style.display = 'inline';
+            } else {
+                badgeSpan.style.display = 'none';
+            }
+        } else {
+            badgeSpan.style.display = 'none';
         }
     }
 }
 
-// Función para actualizar el contenedor de hijos
+function actualizarTodosLosBadges() {
+    for (let i = 1; i <= 6; i++) {
+        const selectSeccion = document.getElementById(`hijo_seccion_${i}`);
+        if (selectSeccion) {
+            actualizarBadgeSeccion(i, selectSeccion.value);
+        }
+        const selectEstatus = document.getElementById(`hijo_estatus_${i}`);
+        if (selectEstatus) {
+            actualizarBadgeEstatus(i, selectEstatus.value);
+        }
+    }
+}
+
 function actualizarHijos(numHijos) {
     const container = document.getElementById('hijos-container');
     const numActual = document.getElementById('num_hijos_actual');
     
     if (!container) return;
     
-    // Guardar datos existentes antes de regenerar
     const datosExistentes = {};
     for (let i = 1; i <= 6; i++) {
         const card = document.querySelector(`.hijo-card[data-hijo-index="${i}"]`);
@@ -501,39 +556,34 @@ function actualizarHijos(numHijos) {
                 genero: document.getElementById(`hijo_genero_${i}`)?.value || '',
                 grado: document.getElementById(`hijo_grado_${i}`)?.value || '',
                 grupo: document.getElementById(`hijo_grupo_${i}`)?.value || '',
-                seccion: document.getElementById(`hijo_seccion_${i}`)?.value || ''
+                seccion: document.getElementById(`hijo_seccion_${i}`)?.value || '',
+                estatus: document.getElementById(`hijo_estatus_${i}`)?.value || 'regular'
             };
         }
     }
     
-    // Generar HTML
     let html = '';
     for (let i = 1; i <= numHijos; i++) {
         html += generarHijoHTML(i, datosExistentes[i] || null);
     }
     container.innerHTML = html;
     
-    // Actualizar el campo oculto
     if (numActual) {
         numActual.value = numHijos;
     }
     
-    // Actualizar badges después de cargar
     setTimeout(actualizarTodosLosBadges, 50);
 }
 
-// Función para remover un hijo específico
 function removerHijo(index) {
     const select = document.getElementById('num_hijos');
     if (!select) return;
     
     let numActual = parseInt(select.value);
     if (numActual > 0 && index <= numActual) {
-        // Crear un nuevo array con los hijos excluyendo el eliminado
         const nuevosValores = [];
         for (let i = 1; i <= numActual; i++) {
             if (i !== index) {
-                // Guardar datos del hijo que se mantiene
                 const datos = {
                     apellido_paterno: document.getElementById(`hijo_apellido_paterno_${i}`)?.value || '',
                     apellido_materno: document.getElementById(`hijo_apellido_materno_${i}`)?.value || '',
@@ -543,16 +593,15 @@ function removerHijo(index) {
                     genero: document.getElementById(`hijo_genero_${i}`)?.value || '',
                     grado: document.getElementById(`hijo_grado_${i}`)?.value || '',
                     grupo: document.getElementById(`hijo_grupo_${i}`)?.value || '',
-                    seccion: document.getElementById(`hijo_seccion_${i}`)?.value || ''
+                    seccion: document.getElementById(`hijo_seccion_${i}`)?.value || '',
+                    estatus: document.getElementById(`hijo_estatus_${i}`)?.value || 'regular'
                 };
                 nuevosValores.push(datos);
             }
         }
         
-        // Actualizar el select a la nueva cantidad
         select.value = nuevosValores.length;
         
-        // Regenerar con los datos guardados
         const container = document.getElementById('hijos-container');
         let html = '';
         for (let i = 0; i < nuevosValores.length; i++) {
@@ -560,21 +609,17 @@ function removerHijo(index) {
         }
         container.innerHTML = html;
         
-        // Actualizar campo oculto
         document.getElementById('num_hijos_actual').value = nuevosValores.length;
         
-        // Actualizar badges
         setTimeout(actualizarTodosLosBadges, 50);
     }
 }
 
-// Evento cuando cambia el número de hijos
 document.addEventListener('DOMContentLoaded', function() {
     const selectNumHijos = document.getElementById('num_hijos');
     const btnAddHijo = document.getElementById('btnAddHijo');
     
     if (selectNumHijos) {
-        // Inicializar con el valor actual
         actualizarHijos(parseInt(selectNumHijos.value));
         
         selectNumHijos.addEventListener('change', function() {
@@ -582,7 +627,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Botón "Agregar otro hijo"
     if (btnAddHijo) {
         btnAddHijo.addEventListener('click', function() {
             if (selectNumHijos) {
@@ -597,12 +641,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Actualizar badges en tiempo real cuando cambia la sección
     document.addEventListener('change', function(e) {
         if (e.target && e.target.id && e.target.id.startsWith('hijo_seccion_')) {
             const match = e.target.id.match(/hijo_seccion_(\d+)/);
             if (match) {
                 actualizarBadgeSeccion(parseInt(match[1]), e.target.value);
+            }
+        }
+        if (e.target && e.target.id && e.target.id.startsWith('hijo_estatus_')) {
+            const match = e.target.id.match(/hijo_estatus_(\d+)/);
+            if (match) {
+                actualizarBadgeEstatus(parseInt(match[1]), e.target.value);
             }
         }
     });

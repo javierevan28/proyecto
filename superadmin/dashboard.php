@@ -158,6 +158,24 @@ include __DIR__ . '/../includes/header.php';
 
   </nav>
 
+
+  <!-- ========== GESTIÓN DE CALIFICACIONES Y PERMISOS ========== -->
+<h3 style="font-size:0.9rem; color:var(--color-muted); margin: 1rem 0 0.8rem 0;">🔧 Administración avanzada</h3>
+<nav class="card-grid" aria-label="Menú de administración">
+
+  <a class="nav-card" href="gestion_calificaciones.php">
+    <span class="nav-card__icon" aria-hidden="true">📊</span>
+    <h3 class="nav-card__title">Gestionar calificaciones</h3>
+    <p class="nav-card__desc">Ver, editar o eliminar calificaciones por grupo</p>
+  </a>
+
+  <a class="nav-card" href="gestion_usuarios_permisos.php">
+    <span class="nav-card__icon" aria-hidden="true">👥</span>
+    <h3 class="nav-card__title">Usuarios y permisos</h3>
+    <p class="nav-card__desc">Asignar roles y permisos a coordinadores</p>
+  </a>
+
+</nav>
   
 
   <!-- ========== REPORTES ========== -->

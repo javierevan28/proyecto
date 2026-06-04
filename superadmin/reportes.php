@@ -64,12 +64,10 @@ include __DIR__ . '/../includes/header.php';
     <p class="alert alert--error">⚠️ No hay ciclo escolar activo.</p>
   <?php else: ?>
 
-  <!-- ── Filtros ────────────────────────────────────────────── -->
   <section class="card" style="margin-bottom:1.5rem;">
     <form method="GET" novalidate>
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1rem; align-items:end;">
 
-        <!-- Grupo -->
         <div class="form-group">
           <label for="grupo_sel">Grupo *</label>
           <select id="grupo_sel" name="grupo_sel" required>
@@ -83,7 +81,6 @@ include __DIR__ . '/../includes/header.php';
           </select>
         </div>
 
-        <!-- Ver por -->
         <div class="form-group">
           <label for="vista">Ver por</label>
           <select id="vista" name="vista" onchange="this.form.submit()">
@@ -92,21 +89,15 @@ include __DIR__ . '/../includes/header.php';
           </select>
         </div>
 
-        <!-- Periodo / Trimestre específico -->
         <div class="form-group">
-          <label for="seleccion">
-            <?= $vista === 'periodo' ? 'Periodo' : 'Trimestre' ?>
-          </label>
+          <label for="seleccion"><?= $vista === 'periodo' ? 'Periodo' : 'Trimestre' ?></label>
           <select id="seleccion" name="seleccion">
             <?php foreach ($opcionesSeleccion as $val => $lbl): ?>
-              <option value="<?= $val ?>" <?= $seleccion === (string)$val ? 'selected' : '' ?>>
-                <?= $lbl ?>
-              </option>
+              <option value="<?= $val ?>" <?= $seleccion === (string)$val ? 'selected' : '' ?>><?= $lbl ?></option>
             <?php endforeach; ?>
           </select>
         </div>
 
-        <!-- Agrupar por -->
         <div class="form-group">
           <label for="agrupacion">Agrupar por</label>
           <select id="agrupacion" name="agrupacion">
@@ -123,7 +114,6 @@ include __DIR__ . '/../includes/header.php';
     </form>
   </section>
 
-  <!-- ── Tabla ──────────────────────────────────────────────── -->
   <?php if ($reporte): ?>
     <?php
       $alumnos          = $reporte['alumnos'];
@@ -154,27 +144,19 @@ include __DIR__ . '/../includes/header.php';
     <div style="overflow-x:auto;">
       <table class="data-table">
         <thead>
-          <!-- Fila 1: nombres de columnas -->
           <tr>
             <th rowspan="2" style="text-align:left; min-width:180px;">Alumno</th>
             <?php foreach ($encabezados as $enc): ?>
-              <th colspan="<?= $nCols ?>"
-                  style="font-size:.78rem; border-left:2px solid #2d5282; text-align:center;">
+              <th colspan="<?= $nCols ?>" style="font-size:.78rem; border-left:2px solid #2d5282; text-align:center;">
                 <?= htmlspecialchars($enc['label']) ?>
               </th>
             <?php endforeach; ?>
-            <th rowspan="2" style="background:#065f46; min-width:65px; text-align:center;">
-              Promedio
-            </th>
+            <th rowspan="2" style="background:#065f46; min-width:65px; text-align:center;">Promedio</th>
           </tr>
-          <!-- Fila 2: P1/T1 etc por cada columna -->
           <tr>
             <?php foreach ($encabezados as $i => $enc): ?>
               <?php foreach ($etiquetasCols as $col => $lbl): ?>
-                <th style="font-size:.72rem; text-align:center;
-                           border-left:<?= $col === array_key_first($etiquetasCols) ? '2px solid #2d5282' : 'none' ?>;">
-                  <?= $lbl ?>
-                </th>
+                <th style="font-size:.72rem; text-align:center; border-left:<?= $col === array_key_first($etiquetasCols) ? '2px solid #2d5282' : 'none' ?>;"><?= $lbl ?></th>
               <?php endforeach; ?>
             <?php endforeach; ?>
           </tr>
@@ -182,27 +164,13 @@ include __DIR__ . '/../includes/header.php';
         <tbody>
           <?php foreach ($alumnos as $al): ?>
             <tr>
-              <td style="font-size:.82rem; text-align:left;">
-                <?= htmlspecialchars(
-                  $al['apellido_paterno'] . ' ' .
-                  ($al['apellido_materno'] ?? '') . ', ' .
-                  $al['nombre']
-                ) ?>
-              </td>
+              <td style="font-size:.82rem; text-align:left;"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
               <?php foreach ($al['columnas'] as $j => $col): ?>
                 <?php foreach ($col['valor'] as $v): ?>
-                  <td style="text-align:center; font-size:.82rem;
-                             border-left:<?= array_key_first($col['valor']) === array_key_first($col['valor']) && $j > 0 ? '1px solid #e2e8f0' : 'none' ?>;
-                             <?= ($v !== null && $v < 6) ? 'color:#991b1b; font-weight:bold;' : '' ?>">
-                    <?= $v ?? '—' ?>
-                  </td>
+                  <td style="text-align:center; font-size:.82rem; border-left:<?= array_key_first($col['valor']) === array_key_first($col['valor']) && $j > 0 ? '1px solid #e2e8f0' : 'none' ?>; <?= ($v !== null && $v < 6) ? 'color:#991b1b; font-weight:bold;' : '' ?>"><?= $v ?? '—' ?></td>
                 <?php endforeach; ?>
               <?php endforeach; ?>
-              <td style="text-align:center; font-weight:bold; font-size:.85rem;
-                         background:#f0fdf4;
-                         color:<?= ($al['promedio_general'] !== null && $al['promedio_general'] < 6) ? '#991b1b' : '#065f46' ?>;">
-                <?= $al['promedio_general'] ?? '—' ?>
-              </td>
+              <td style="text-align:center; font-weight:bold; font-size:.85rem; background:#f0fdf4; color:<?= ($al['promedio_general'] !== null && $al['promedio_general'] < 6) ? '#991b1b' : '#065f46' ?>;"><?= $al['promedio_general'] ?? '—' ?></td>
             </tr>
           <?php endforeach; ?>
         </tbody>

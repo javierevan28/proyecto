@@ -3,10 +3,12 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../models/MateriaModel.php';
+require_once __DIR__ . '/../models/CampoFormativoModel.php';
 requireRol([1]);
 
 $db = getConexion();
 $materiaModelo = new MateriaModel($db);
+$campoModelo = new CampoFormativoModel($db);
 
 $mensaje = null;
 $error = null;
@@ -17,17 +19,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar'])) {
     $grado = (int)$_POST['grado'];
     $materiasSeleccionadas = $_POST['materias'] ?? [];
     $ordenes = $_POST['orden'] ?? [];
+    $camposFormativos = $_POST['campo_formativo'] ?? [];
     
     // Eliminar asignaciones existentes de este grado
     $stmtDel = $db->prepare("DELETE FROM grados_materias WHERE seccion = ? AND grado = ?");
     $stmtDel->bind_param('si', $seccion, $grado);
     $stmtDel->execute();
     
-    // Insertar nuevas con el orden que puso el admin
+    // Insertar nuevas
     foreach ($materiasSeleccionadas as $materiaId) {
         $orden = isset($ordenes[$materiaId]) ? (int)$ordenes[$materiaId] : 0;
-        $stmtIns = $db->prepare("INSERT INTO grados_materias (seccion, grado, materia_id, orden) VALUES (?, ?, ?, ?)");
-        $stmtIns->bind_param('siii', $seccion, $grado, $materiaId, $orden);
+        $campoId = isset($camposFormativos[$materiaId]) && !empty($camposFormativos[$materiaId]) 
+            ? (int)$camposFormativos[$materiaId] 
+            : null;
+        
+        $stmtIns = $db->prepare("INSERT INTO grados_materias (seccion, grado, materia_id, campo_formativo_id, orden) VALUES (?, ?, ?, ?, ?)");
+        $stmtIns->bind_param('siiii', $seccion, $grado, $materiaId, $campoId, $orden);
         $stmtIns->execute();
     }
     
@@ -40,19 +47,9 @@ $grados = [1, 2, 3, 4, 5, 6];
 
 // Obtener TODAS las materias activas
 $todasMaterias = $materiaModelo->listarActivas();
+$camposDisponibles = $campoModelo->listarActivos();
 
-// Eliminar duplicados por nombre
-$vistos = [];
-$materiasUnicas = [];
-foreach ($todasMaterias as $m) {
-    if (!in_array($m['nombre'], $vistos)) {
-        $vistos[] = $m['nombre'];
-        $materiasUnicas[] = $m;
-    }
-}
-$todasMaterias = $materiasUnicas;
-
-// Separar materias por tipo
+// Separar materias por tipo (SIN FILTRAR DUPLICADOS)
 $materiasBase = [];
 $materiasIngles = [];
 $materiasArtes = [];
@@ -67,7 +64,6 @@ foreach ($todasMaterias as $m) {
     } elseif ((int)$m['es_higiene'] === 1) {
         $materiasHigiene[] = $m;
     } else {
-        // Verificar si es cocurricular por nombre
         $cocurriculares = ['Educación Física', 'Tecnología', 'Francés'];
         if (in_array($m['nombre'], $cocurriculares)) {
             $materiasCocurriculares[] = $m;
@@ -83,10 +79,12 @@ $tabActual = $_GET['tab'] ?? 'base';
 
 // Obtener materias ya asignadas a este grado
 $stmtAsig = $db->prepare("
-    SELECT gm.materia_id, gm.orden, m.nombre, m.es_ingles, m.es_artes, m.es_higiene, cf.nombre as campo_formativo_nombre
+    SELECT gm.materia_id, gm.orden, gm.campo_formativo_id,
+           m.nombre, m.es_ingles, m.es_artes, m.es_higiene,
+           cf.nombre as campo_formativo_nombre
     FROM grados_materias gm
     JOIN materias m ON m.id = gm.materia_id
-    LEFT JOIN campos_formativos cf ON cf.id = m.campo_formativo_id
+    LEFT JOIN campos_formativos cf ON cf.id = COALESCE(gm.campo_formativo_id, m.campo_formativo_id)
     WHERE gm.seccion = ? AND gm.grado = ?
     ORDER BY gm.orden ASC
 ");
@@ -134,10 +132,10 @@ include __DIR__ . '/../includes/header.php';
     }
     .materias-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
         gap: 0.5rem;
         margin-bottom: 1.5rem;
-        max-height: 400px;
+        max-height: 500px;
         overflow-y: auto;
         padding: 0.5rem;
         border: 1px solid var(--color-border);
@@ -148,10 +146,18 @@ include __DIR__ . '/../includes/header.php';
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.4rem;
+        padding: 0.5rem;
         background: white;
         border-radius: var(--radius-sm);
         border: 1px solid var(--color-border);
+        flex-wrap: wrap;
+    }
+    .materia-item .materia-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 2;
+        min-width: 180px;
     }
     .materia-item input[type="checkbox"] {
         width: 18px;
@@ -160,21 +166,29 @@ include __DIR__ . '/../includes/header.php';
         accent-color: var(--color-primary);
         flex-shrink: 0;
     }
-    .materia-item label {
-        flex: 1;
+    .materia-item .materia-nombre {
         font-size: 0.85rem;
-        cursor: pointer;
+        font-weight: 500;
+        flex: 1;
+    }
+    .materia-item select {
+        width: 160px;
+        padding: 0.3rem;
+        font-size: 0.75rem;
+        border: 1px solid #ccd3db;
+        border-radius: 4px;
+        background: white;
     }
     .materia-item .orden-input {
         width: 60px;
-        padding: 0.2rem;
+        padding: 0.3rem;
         text-align: center;
         border: 1px solid #ccd3db;
         border-radius: 4px;
         font-size: 0.75rem;
     }
     .badge-mini {
-        font-size: 0.65rem;
+        font-size: 0.6rem;
         padding: 0.1rem 0.3rem;
         margin-left: 0.3rem;
     }
@@ -189,6 +203,33 @@ include __DIR__ . '/../includes/header.php';
         font-size: 0.75rem;
         cursor: pointer;
     }
+    .campo-select {
+        font-size: 0.75rem;
+    }
+    .btn {
+        margin-top: 1rem;
+    }
+    /* ── Fix tabla resumen ─── */
+.data-table thead th {
+    text-align: left;
+}
+
+.data-table tbody td {
+    text-align: left;
+    vertical-align: middle;
+}
+
+.data-table tbody td:first-child {
+    text-align: center;
+    font-weight: 700;
+    background: var(--color-primary);
+    color: #fff;
+    width: 80px;
+}
+
+.data-table tbody tr:last-child td:first-child {
+    border-bottom-left-radius: var(--radius-sm);
+}
 </style>
 
 <main class="container">
@@ -203,6 +244,7 @@ include __DIR__ . '/../includes/header.php';
             <p class="alert alert--error">⚠️ <?= $error ?></p>
         <?php endif; ?>
 
+        <!-- Selector de sección y grado -->
         <form method="GET" style="margin-bottom: 1.5rem;">
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                 <div class="form-group" style="margin-bottom: 0;">
@@ -247,24 +289,38 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="materias-grid" id="grid-base">
                     <?php foreach ($materiasBase as $m): ?>
-                        <?php $checked = in_array($m['id'], $materiasAsignadasIds); ?>
-                        <?php $ordenActual = '';
+                        <?php 
+                        $checked = in_array($m['id'], $materiasAsignadasIds);
+                        $ordenActual = '';
+                        $campoActual = $m['campo_formativo_id'] ?? '';
                         foreach ($materiasAsignadas as $ma) {
                             if ($ma['materia_id'] == $m['id']) {
                                 $ordenActual = $ma['orden'];
+                                $campoActual = $ma['campo_formativo_id'] ?? $m['campo_formativo_id'] ?? '';
                                 break;
                             }
-                        } ?>
+                        }
+                        ?>
                         <div class="materia-item">
-                            <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="base_<?= $m['id'] ?>" class="cb-base" <?= $checked ? 'checked' : '' ?>>
-                            <label for="base_<?= $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?></label>
+                            <div class="materia-info">
+                                <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="base_<?= $m['id'] ?>" class="cb-base" <?= $checked ? 'checked' : '' ?>>
+                                <label for="base_<?= $m['id'] ?>" class="materia-nombre"><?= htmlspecialchars($m['nombre']) ?></label>
+                            </div>
+                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
+                                <option value="">Sin campo formativo</option>
+                                <?php foreach ($camposDisponibles as $cf): ?>
+                                    <option value="<?= $cf['id'] ?>" <?= $campoActual == $cf['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cf['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                             <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
                         </div>
                     <?php endforeach; ?>
                 </div>
             </div>
 
-            <!-- Pestaña Inglés -->
+            <!-- Pestaña Inglés - SOLO 5 MATERIAS -->
             <div id="tab-ingles" class="tab-pane <?= $tabActual === 'ingles' ? 'active' : '' ?>">
                 <div class="select-all">
                     <input type="checkbox" id="select-all-ingles" onchange="toggleAll('ingles', this.checked)">
@@ -272,17 +328,42 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="materias-grid" id="grid-ingles">
                     <?php foreach ($materiasIngles as $m): ?>
-                        <?php $checked = in_array($m['id'], $materiasAsignadasIds); ?>
-                        <?php $ordenActual = '';
+                        <?php 
+                        $checked = in_array($m['id'], $materiasAsignadasIds);
+                        $ordenActual = '';
+                        $campoActual = $m['campo_formativo_id'] ?? 1;
                         foreach ($materiasAsignadas as $ma) {
                             if ($ma['materia_id'] == $m['id']) {
                                 $ordenActual = $ma['orden'];
+                                $campoActual = $ma['campo_formativo_id'] ?? $m['campo_formativo_id'] ?? 1;
                                 break;
                             }
-                        } ?>
+                        }
+                        // Formatear el nombre para mostrar: Ej: "1° - Speaking" o "1 Sec - Speaking"
+                        $gradoTexto = '';
+                        if ($seccionActual === 'secundaria') {
+                            $gradoTexto = $gradoActual . ' Sec';
+                        } else {
+                            $gradoTexto = $gradoActual . '°';
+                        }
+                        $nombreMostrar = $gradoTexto . ' - ' . $m['nombre'];
+                        ?>
                         <div class="materia-item">
-                            <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="ingles_<?= $m['id'] ?>" class="cb-ingles" <?= $checked ? 'checked' : '' ?>>
-                            <label for="ingles_<?= $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?> <span class="badge badge-mini">Inglés</span></label>
+                            <div class="materia-info">
+                                <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="ingles_<?= $m['id'] ?>" class="cb-ingles" <?= $checked ? 'checked' : '' ?>>
+                                <label for="ingles_<?= $m['id'] ?>" class="materia-nombre">
+                                    <?= htmlspecialchars($nombreMostrar) ?>
+                                    <span class="badge badge-mini">Inglés</span>
+                                </label>
+                            </div>
+                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
+                                <option value="">Sin campo formativo</option>
+                                <?php foreach ($camposDisponibles as $cf): ?>
+                                    <option value="<?= $cf['id'] ?>" <?= $campoActual == $cf['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cf['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                             <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
                         </div>
                     <?php endforeach; ?>
@@ -297,17 +378,34 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="materias-grid" id="grid-artes">
                     <?php foreach ($materiasArtes as $m): ?>
-                        <?php $checked = in_array($m['id'], $materiasAsignadasIds); ?>
-                        <?php $ordenActual = '';
+                        <?php 
+                        $checked = in_array($m['id'], $materiasAsignadasIds);
+                        $ordenActual = '';
+                        $campoActual = $m['campo_formativo_id'] ?? '';
                         foreach ($materiasAsignadas as $ma) {
                             if ($ma['materia_id'] == $m['id']) {
                                 $ordenActual = $ma['orden'];
+                                $campoActual = $ma['campo_formativo_id'] ?? $m['campo_formativo_id'] ?? '';
                                 break;
                             }
-                        } ?>
+                        }
+                        ?>
                         <div class="materia-item">
-                            <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="artes_<?= $m['id'] ?>" class="cb-artes" <?= $checked ? 'checked' : '' ?>>
-                            <label for="artes_<?= $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?> <span class="badge badge-mini">Artes</span></label>
+                            <div class="materia-info">
+                                <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="artes_<?= $m['id'] ?>" class="cb-artes" <?= $checked ? 'checked' : '' ?>>
+                                <label for="artes_<?= $m['id'] ?>" class="materia-nombre">
+                                    <?= htmlspecialchars($m['nombre']) ?>
+                                    <span class="badge badge-mini">Artes</span>
+                                </label>
+                            </div>
+                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
+                                <option value="">Sin campo formativo</option>
+                                <?php foreach ($camposDisponibles as $cf): ?>
+                                    <option value="<?= $cf['id'] ?>" <?= $campoActual == $cf['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cf['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                             <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
                         </div>
                     <?php endforeach; ?>
@@ -322,17 +420,31 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="materias-grid" id="grid-cocurriculares">
                     <?php foreach ($materiasCocurriculares as $m): ?>
-                        <?php $checked = in_array($m['id'], $materiasAsignadasIds); ?>
-                        <?php $ordenActual = '';
+                        <?php 
+                        $checked = in_array($m['id'], $materiasAsignadasIds);
+                        $ordenActual = '';
+                        $campoActual = $m['campo_formativo_id'] ?? '';
                         foreach ($materiasAsignadas as $ma) {
                             if ($ma['materia_id'] == $m['id']) {
                                 $ordenActual = $ma['orden'];
+                                $campoActual = $ma['campo_formativo_id'] ?? $m['campo_formativo_id'] ?? '';
                                 break;
                             }
-                        } ?>
+                        }
+                        ?>
                         <div class="materia-item">
-                            <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="cocurri_<?= $m['id'] ?>" class="cb-cocurriculares" <?= $checked ? 'checked' : '' ?>>
-                            <label for="cocurri_<?= $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?></label>
+                            <div class="materia-info">
+                                <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="cocurri_<?= $m['id'] ?>" class="cb-cocurriculares" <?= $checked ? 'checked' : '' ?>>
+                                <label for="cocurri_<?= $m['id'] ?>" class="materia-nombre"><?= htmlspecialchars($m['nombre']) ?></label>
+                            </div>
+                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
+                                <option value="">Sin campo formativo</option>
+                                <?php foreach ($camposDisponibles as $cf): ?>
+                                    <option value="<?= $cf['id'] ?>" <?= $campoActual == $cf['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cf['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                             <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
                         </div>
                     <?php endforeach; ?>
@@ -348,17 +460,34 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="materias-grid" id="grid-higiene">
                     <?php foreach ($materiasHigiene as $m): ?>
-                        <?php $checked = in_array($m['id'], $materiasAsignadasIds); ?>
-                        <?php $ordenActual = '';
+                        <?php 
+                        $checked = in_array($m['id'], $materiasAsignadasIds);
+                        $ordenActual = '';
+                        $campoActual = $m['campo_formativo_id'] ?? '';
                         foreach ($materiasAsignadas as $ma) {
                             if ($ma['materia_id'] == $m['id']) {
                                 $ordenActual = $ma['orden'];
+                                $campoActual = $ma['campo_formativo_id'] ?? $m['campo_formativo_id'] ?? '';
                                 break;
                             }
-                        } ?>
+                        }
+                        ?>
                         <div class="materia-item">
-                            <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="higiene_<?= $m['id'] ?>" class="cb-higiene" <?= $checked ? 'checked' : '' ?>>
-                            <label for="higiene_<?= $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?> <span class="badge badge-mini badge--warn">Higiene</span></label>
+                            <div class="materia-info">
+                                <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="higiene_<?= $m['id'] ?>" class="cb-higiene" <?= $checked ? 'checked' : '' ?>>
+                                <label for="higiene_<?= $m['id'] ?>" class="materia-nombre">
+                                    <?= htmlspecialchars($m['nombre']) ?>
+                                    <span class="badge badge-mini badge--warn">Higiene</span>
+                                </label>
+                            </div>
+                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
+                                <option value="">Sin campo formativo</option>
+                                <?php foreach ($camposDisponibles as $cf): ?>
+                                    <option value="<?= $cf['id'] ?>" <?= $campoActual == $cf['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cf['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                             <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
                         </div>
                     <?php endforeach; ?>
@@ -386,21 +515,27 @@ include __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                     <?php foreach ($materiasAsignadas as $ma): ?>
+                        <?php
+                        $tipoMateria = '';
+                        if ((int)$ma['es_ingles']) {
+                            $tipoMateria = '<span class="badge">Inglés</span>';
+                            $gradoTexto = '';
+                            if ($seccionActual === 'secundaria') {
+                                $gradoTexto = $gradoActual . ' Sec';
+                            } else {
+                                $gradoTexto = $gradoActual . '°';
+                            }
+                            $nombreMostrar = $gradoTexto . ' - ' . $ma['nombre'];
+                        } else {
+                            $tipoMateria = '<span class="badge">Base</span>';
+                            $nombreMostrar = $ma['nombre'];
+                        }
+                        ?>
                         <tr>
                             <td><?= $ma['orden'] ?></td>
-                            <td><strong><?= htmlspecialchars($ma['nombre']) ?></strong></td>
+                            <td><strong><?= htmlspecialchars($nombreMostrar) ?></strong></td>
                             <td><?= htmlspecialchars($ma['campo_formativo_nombre'] ?? '—') ?></td>
-                            <td>
-                                <?php if ((int)$ma['es_ingles']): ?>
-                                    <span class="badge">Inglés</span>
-                                <?php elseif ((int)$ma['es_artes']): ?>
-                                    <span class="badge">Artes</span>
-                                <?php elseif ((int)$ma['es_higiene']): ?>
-                                    <span class="badge badge--warn">Higiene</span>
-                                <?php else: ?>
-                                    <span class="badge">Base</span>
-                                <?php endif; ?>
-                            </td>
+                            <td><?= $tipoMateria ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -422,16 +557,13 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
         const tabId = this.dataset.tab;
         
-        // Actualizar URL con el tab seleccionado
         const url = new URL(window.location.href);
         url.searchParams.set('tab', tabId);
         window.history.pushState({}, '', url);
         
-        // Actualizar clases de pestañas
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
         
-        // Actualizar paneles
         document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
         document.getElementById(`tab-${tabId}`).classList.add('active');
     });

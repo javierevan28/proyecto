@@ -71,29 +71,22 @@ if ($asignacionId > 0) {
     }
 }
 
-// Función para obtener aspectos de inglés según el grado
-function obtenerAspectosInglesPorGrado($db, $seccion, $grado) {
+function obtenerAspectosPorAsignacion($db, $asignacionId) {
     $stmt = $db->prepare("
-        SELECT id, nombre, orden FROM asignacion_ingles_aspectos 
-        WHERE seccion = ? AND grado = ? AND asignacion_id IS NULL AND activo = 1
+        SELECT id, nombre, porcentaje, orden
+        FROM asignacion_aspectos
+        WHERE asignacion_id = ? AND activo = 1
         ORDER BY orden ASC
     ");
-    $stmt->bind_param('si', $seccion, $grado);
+    $stmt->bind_param('i', $asignacionId);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $aspectos = [];
-    while ($row = $result->fetch_assoc()) {
-        $aspectos[] = $row;
-    }
-    return $aspectos;
+    return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 }
 
-// Función para obtener alumnos con calificaciones de inglés por grado
-function obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos) {
+function obtenerAlumnosConCalificacionesPorAspecto($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos) {
     $stmtAl = $db->prepare("
         SELECT al.id AS alumno_id,
-               al.nombre, al.apellido_paterno, al.apellido_materno,
-               al.matricula
+               al.nombre, al.apellido_paterno, al.apellido_materno
         FROM alumnos al
         WHERE al.seccion = ? AND al.grado = ? AND al.grupo = ? AND al.activo = 1
         ORDER BY al.apellido_paterno, al.apellido_materno, al.nombre
@@ -106,50 +99,41 @@ function obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $gru
         $alumno['aspectos'] = [];
         foreach ($aspectos as $asp) {
             $stmtC = $db->prepare("
-                SELECT calificacion FROM calificaciones_ingles
+                SELECT calificacion FROM calificaciones
                 WHERE alumno_id = ? AND aspecto_id = ? AND periodo = ?
                 LIMIT 1
             ");
             $stmtC->bind_param('iii', $alumno['alumno_id'], $asp['id'], $periodo);
             $stmtC->execute();
-            $resC = $stmtC->get_result()->fetch_assoc();
-            $alumno['aspectos'][$asp['id']] = $resC['calificacion'] ?? null;
+            $res = $stmtC->get_result()->fetch_assoc();
+            $alumno['aspectos'][$asp['id']] = $res['calificacion'] ?? null;
         }
+        $suma = 0; $peso = 0;
+        foreach ($aspectos as $asp) {
+            $cal = $alumno['aspectos'][$asp['id']] ?? null;
+            if ($cal !== null) {
+                $suma += $cal * ($asp['porcentaje'] / 100);
+                $peso += $asp['porcentaje'];
+            }
+        }
+        $alumno['promedio'] = $peso > 0 ? round($suma) : null;
     }
     
-    return ['aspectos' => $aspectos, 'alumnos' => $alumnos];
+    return $alumnos;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $materiaActual) {
-    if ((int)$materiaActual['es_ingles']) {
-        $resultado = $calModelo->guardarCalificacionesIngles(
-            $periodo, (int)$profesor['id'], $_POST['cal_ingles'] ?? []
-        );
-    } elseif ((int)$materiaActual['es_artes']) {
-        $resultado = $calModelo->guardarCalificacionesArtes(
-            $asignacionId, $periodo, (int)$profesor['id'], $_POST['cal'] ?? []
-        );
-    } else {
-        $resultado = $calModelo->guardarCalificaciones(
-            $asignacionId, $periodo, (int)$profesor['id'], $_POST['cal'] ?? []
-        );
-    }
+    $resultado = $calModelo->guardarCalificacionesPorAspecto(
+        $asignacionId, $periodo, (int)$profesor['id'], $_POST['cal_aspectos'] ?? []
+    );
 }
 
 $alumnos  = [];
 $aspectos = [];
 
 if ($materiaActual) {
-    if ((int)$materiaActual['es_ingles']) {
-        $aspectos = obtenerAspectosInglesPorGrado($db, $seccion, $grado);
-        $datos = obtenerAlumnosInglesPorGrado($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos);
-        $alumnos = $datos['alumnos'];
-        $aspectos = $datos['aspectos'];
-    } elseif ((int)$materiaActual['es_artes']) {
-        $alumnos = $calModelo->obtenerAlumnosConCalificacionArtes($asignacionId, $seccion, $grado, $grupo, $periodo);
-    } else {
-        $alumnos = $calModelo->obtenerAlumnosConCalificacion($asignacionId, $seccion, $grado, $grupo, $periodo);
-    }
+    $aspectos = obtenerAspectosPorAsignacion($db, $asignacionId);
+    $alumnos = obtenerAlumnosConCalificacionesPorAspecto($db, $asignacionId, $seccion, $grado, $grupo, $periodo, $aspectos);
 }
 
 $pageTitle = 'Captura — ' . ucfirst($seccion) . ' ' . $grado . '° ' . $grupo;
@@ -157,6 +141,70 @@ $backLabel = '← Mis grupos';
 $backLink  = 'dashboard.php';
 include __DIR__ . '/../includes/header.php';
 ?>
+
+<style>
+.table-aspectos {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+    min-width: 700px;
+}
+.table-aspectos th,
+.table-aspectos td {
+    border: 1px solid #e2e8f0;
+    padding: 0.4rem 0.3rem;
+    text-align: center;
+    vertical-align: middle;
+}
+.table-aspectos th {
+    background: #1e3a5f;
+    color: white;
+    font-weight: 600;
+}
+.table-aspectos .alumno-nombre {
+    text-align: left;
+}
+.cal-input {
+    width: 55px;
+    padding: 0.2rem;
+    text-align: center;
+    border: 1px solid #ccd3db;
+    border-radius: 4px;
+    font-size: 0.7rem;
+}
+.promedio-cell {
+    background: #d1fae5;
+    font-weight: bold;
+    color: #065f46;
+}
+.table-responsive {
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+.captura-layout {
+    display: flex;
+    gap: 1rem;
+}
+.materias-sidebar {
+    width: 280px;
+    flex-shrink: 0;
+}
+.captura-main {
+    flex: 1;
+    min-width: 0;
+}
+@media (max-width: 768px) {
+    .captura-layout {
+        flex-direction: column;
+    }
+    .materias-sidebar {
+        width: 100%;
+    }
+    .table-aspectos {
+        min-width: 600px;
+    }
+}
+</style>
 
 <main class="container">
 
@@ -175,12 +223,6 @@ include __DIR__ . '/../includes/header.php';
     <?php else: ?>
       <p class="alert alert--error">⚠️ <?= htmlspecialchars($resultado['error']) ?></p>
     <?php endif; ?>
-  <?php endif; ?>
-
-  <?php if (($_GET['msg'] ?? '') === 'importado'): ?>
-    <p class="alert alert--success">✅ Calificaciones importadas correctamente desde Excel.</p>
-  <?php elseif (($_GET['msg'] ?? '') === 'error'): ?>
-    <p class="alert alert--error">⚠️ <?= htmlspecialchars($_GET['detalle'] ?? 'Error al importar') ?></p>
   <?php endif; ?>
 
   <div class="captura-layout">
@@ -207,12 +249,10 @@ include __DIR__ . '/../includes/header.php';
         <div class="card">
           <p class="empty-state">Selecciona una materia del menú para capturar calificaciones.</p>
         </div>
-
       <?php elseif (empty($alumnos)): ?>
         <div class="card">
           <p class="empty-state">No hay alumnos registrados en este grupo.</p>
         </div>
-
       <?php else: ?>
         <div class="card">
           <div class="captura-header">
@@ -220,104 +260,55 @@ include __DIR__ . '/../includes/header.php';
               <?= htmlspecialchars($materiaActual['materia_nombre']) ?>
               <span class="badge"><?= count($alumnos) ?> alumnos</span>
             </h2>
-            <a class="btn btn--sm btn--accent"
-               href="exportar_excel.php?asignacion_id=<?= $asignacionId ?>&seccion=<?= $seccion ?>&grado=<?= $grado ?>&grupo=<?= $grupo ?>&periodo=<?= $periodo ?>&es_ingles=<?= $materiaActual['es_ingles'] ?>&es_artes=<?= $materiaActual['es_artes'] ?>">
-              ⬇ Descargar Excel
-            </a>
           </div>
 
           <form method="POST">
             <input type="hidden" name="asignacion_id" value="<?= $asignacionId ?>">
 
-            <?php if ((int)$materiaActual['es_ingles'] && !empty($aspectos)): ?>
-              <div class="table-responsive">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Alumno</th>
-                      <?php foreach ($aspectos as $asp): ?>
-                        <th><?= htmlspecialchars($asp['nombre']) ?></th>
-                      <?php endforeach; ?>
-                      <th>Promedio</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach ($alumnos as $i => $al): ?>
-                      <?php
-                        $suma  = 0; $count = 0;
-                        foreach ($aspectos as $asp) {
-                            $v = $al['aspectos'][$asp['id']] ?? null;
-                            if ($v !== null) { $suma += $v; $count++; }
-                        }
-                        $promedio = $count > 0 ? round($suma / $count, 1) : '—';
-                      ?>
-                      <tr>
-                        <td><?= $i + 1 ?></td>
-                        <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
-                        <?php foreach ($aspectos as $asp): ?>
-                          <td>
-                            <input type="number"
-                                   name="cal_ingles[<?= $al['alumno_id'] ?>][<?= $asp['id'] ?>]"
-                                   value="<?= $al['aspectos'][$asp['id']] ?? '' ?>"
-                                   min="0" max="10" step="1"
-                                   class="cal-input">
-                          </td>
-                        <?php endforeach; ?>
-                        <td class="promedio-cell"><strong><?= $promedio ?></strong></td>
-                      </tr>
+            <div class="table-responsive">
+              <table class="table-aspectos">
+                <thead>
+                  <tr>
+                    <th rowspan="2">#</th>
+                    <th rowspan="2">Alumno</th>
+                    <th colspan="<?= count($aspectos) ?>">Aspectos</th>
+                    <th rowspan="2">Promedio Final</th>
+                  </tr>
+                  <tr>
+                    <?php foreach ($aspectos as $asp): ?>
+                      <th>
+                        <?= htmlspecialchars($asp['nombre']) ?>
+                        <br><small><?= $asp['porcentaje'] ?>%</small>
+                      </th>
                     <?php endforeach; ?>
-                  </tbody>
-                </table>
-              </div>
-
-            <?php else: ?>
-              <div class="table-responsive">
-                <table class="data-table">
-                  <thead>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php $counter = 1; ?>
+                  <?php foreach ($alumnos as $al): ?>
                     <tr>
-                      <th>#</th>
-                      <th>Alumno</th>
-                      <th>Matrícula</th>
-                      <th>Calificación</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach ($alumnos as $i => $al): ?>
-                      <tr>
-                        <td><?= $i + 1 ?></td>
-                        <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
-                        <td><span class="badge"><?= htmlspecialchars($al['matricula'] ?? '—') ?></span></td>
+                      <td><?= $counter++ ?></td>
+                      <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
+                      <?php foreach ($aspectos as $asp): ?>
                         <td>
                           <input type="number"
-                                 name="cal[<?= $al['alumno_id'] ?>]"
-                                 value="<?= $al['calificacion'] ?? '' ?>"
-                                 min="0" max="10" step="1"
+                                 name="cal_aspectos[<?= $al['alumno_id'] ?>][<?= $asp['id'] ?>]"
+                                 value="<?= $al['aspectos'][$asp['id']] ?? '' ?>"
+                                 min="0" max="10" step="0.1"
                                  class="cal-input">
                         </td>
-                      </tr>
-                    <?php endforeach; ?>
-                  </tbody>
-                </table>
-              </div>
-            <?php endif; ?>
+                      <?php endforeach; ?>
+                      <td class="promedio-cell"><strong><?= $al['promedio'] ?? '—' ?></strong></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
 
-            <button class="btn" type="submit">💾 Guardar calificaciones</button>
+            <div style="margin-top: 1rem;">
+              <button class="btn" type="submit">💾 Guardar calificaciones</button>
+            </div>
           </form>
-
-          <div class="upload-excel">
-            <p class="form-hint">También puedes llenar el Excel descargado y subirlo aquí:</p>
-            <form method="POST" action="importar_excel.php" enctype="multipart/form-data">
-              <input type="hidden" name="asignacion_id" value="<?= $asignacionId ?>">
-              <input type="hidden" name="periodo" value="<?= $periodo ?>">
-              <input type="hidden" name="es_ingles" value="<?= $materiaActual['es_ingles'] ?>">
-              <input type="hidden" name="es_artes" value="<?= $materiaActual['es_artes'] ?>">
-              <div class="upload-row">
-                <input type="file" name="archivo_excel" accept=".xlsx,.xls">
-                <button class="btn btn--sm btn--success" type="submit">⬆ Subir Excel</button>
-              </div>
-            </form>
-          </div>
         </div>
       <?php endif; ?>
     </section>
