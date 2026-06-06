@@ -24,16 +24,28 @@ $accion    = $_GET['accion'] ?? '';
 $editId    = (int)($_GET['id'] ?? 0);
 
 if ($accion === 'desactivar' && $editId > 0) {
-    $resultado = $asigModelo->toggleActivo($editId, 0);
-    $msg = isset($resultado['success']) ? 'desactivado' : 'error';
-    header('Location: asignaciones_base.php?msg=' . $msg . '&detalle=' . urlencode($resultado['error'] ?? ''));
+    $stmt = $db->prepare("UPDATE asignaciones SET activo = 0 WHERE id = ?");
+    $stmt->bind_param('i', $editId);
+    $stmt->execute();
+    header('Location: asignaciones_base.php?msg=desactivado');
     exit;
 }
 
 if ($accion === 'activar' && $editId > 0) {
-    $resultado = $asigModelo->toggleActivo($editId, 1);
-    $msg = isset($resultado['success']) ? 'activado' : 'error';
-    header('Location: asignaciones_base.php?msg=' . $msg . '&detalle=' . urlencode($resultado['error'] ?? ''));
+    $stmt = $db->prepare("UPDATE asignaciones SET activo = 1 WHERE id = ?");
+    $stmt->bind_param('i', $editId);
+    $stmt->execute();
+    header('Location: asignaciones_base.php?msg=activado');
+    exit;
+}
+
+// ELIMINAR
+if ($accion === 'eliminar' && $editId > 0) {
+    $db->query("DELETE FROM asignacion_maestros WHERE asignacion_id = $editId");
+    $db->query("DELETE FROM asignacion_artes WHERE asignacion_id = $editId");
+    $db->query("DELETE FROM asignacion_ingles_aspectos WHERE asignacion_id = $editId");
+    $db->query("DELETE FROM asignaciones WHERE id = $editId");
+    header('Location: asignaciones_base.php?msg=eliminado');
     exit;
 }
 
@@ -60,6 +72,7 @@ $asignaciones = [];
 foreach ($todasAsignaciones as $key => $grupo) {
     $grupoFiltrado = [];
     foreach ($grupo as $asignacion) {
+        // SOLO materias base: NO ingles, NO artes, NO higiene
         if ((int)$asignacion['es_ingles'] === 0 && 
             (int)$asignacion['es_artes'] === 0 && 
             (int)$asignacion['es_higiene'] === 0) {
@@ -71,7 +84,7 @@ foreach ($todasAsignaciones as $key => $grupo) {
     }
 }
 
-// Obtener materias por grado si ya hay selección
+// Obtener materias por grado si ya hay selección - SOLO MATERIAS BASE
 $seccionSeleccionada = $_GET['seccion'] ?? '';
 $gradoSeleccionado = $_GET['grado'] ?? '';
 $grupoSeleccionado = $_GET['grupo'] ?? '';
@@ -83,6 +96,10 @@ if ($seccionSeleccionada && $gradoSeleccionado) {
         FROM grados_materias gm
         JOIN materias m ON m.id = gm.materia_id
         WHERE gm.seccion = ? AND gm.grado = ?
+            AND m.es_ingles = 0 
+            AND m.es_artes = 0 
+            AND m.es_higiene = 0
+            AND m.nombre NOT IN ('Tecnología', 'Educación Física', 'Francés')
         ORDER BY gm.orden ASC
     ");
     $stmt->bind_param('si', $seccionSeleccionada, $gradoSeleccionado);
@@ -92,38 +109,29 @@ if ($seccionSeleccionada && $gradoSeleccionado) {
 
 $pageTitle = 'Superadmin › Asignaciones - Materias Base';
 $backLink  = 'dashboard.php';
-$scripts   = ['/proyecto/js/modal.js'];
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
-  <div class="modal">
-    <h3 class="modal__title" id="modalTitle"></h3>
-    <p class="modal__body" id="modalBody"></p>
-    <div class="modal__actions">
-      <a class="btn modal__confirm" id="modalConfirm" href="#">Confirmar</a>
-      <button class="btn modal__cancel" id="modalCancel" type="button">Cancelar</button>
+<!-- MODAL PERSONALIZADO -->
+<div id="confirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:12px; padding:20px; max-width:400px; margin:auto; box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+        <h3 id="modalTitle" style="margin-bottom:15px; color:#1e3a5f;">Confirmar</h3>
+        <p id="modalBody" style="margin-bottom:20px;">¿Estás seguro de realizar esta acción?</p>
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button id="modalCancel" class="btn" style="background:#e2e8f0; color:#333;">Cancelar</button>
+            <a id="modalConfirm" class="btn" style="background:#dc2626; color:white;">Confirmar</a>
+        </div>
     </div>
-  </div>
 </div>
 
 <main class="container">
-
-  <?php if ($resultado): ?>
-    <?php if (isset($resultado['success'])): ?>
-      <p class="alert alert--success">
-        ✅ <?= $resultado['creadas'] ?> asignación(es) creada(s).
-        <?= ($resultado['omitidas'] ?? 0) > 0 ? ($resultado['omitidas'] ?? 0) . ' ya existían y se actualizaron.' : '' ?>
-      </p>
-    <?php else: ?>
-      <p class="alert alert--error">⚠️ <?= htmlspecialchars($resultado['error']) ?></p>
-    <?php endif; ?>
-  <?php endif; ?>
 
   <?php if ($msgRedir === 'activado'): ?>
     <p class="alert alert--success">✅ Asignación activada.</p>
   <?php elseif ($msgRedir === 'desactivado'): ?>
     <p class="alert alert--success">✅ Asignación desactivada.</p>
+  <?php elseif ($msgRedir === 'eliminado'): ?>
+    <p class="alert alert--success">✅ Asignación ELIMINADA correctamente.</p>
   <?php elseif ($msgRedir === 'error'): ?>
     <p class="alert alert--error">⚠️ <?= htmlspecialchars($msgDetall) ?></p>
   <?php endif; ?>
@@ -188,7 +196,7 @@ include __DIR__ . '/../includes/header.php';
             </p>
             
             <?php if (empty($materiasDelGrado)): ?>
-              <p class="alert alert--warn">No hay materias asignadas a este grado. Ve a "Materias por grado" y asigna materias primero.</p>
+              <p class="alert alert--warn">No hay materias base asignadas a este grado. Ve a "Materias por grado" y asigna materias primero.</p>
             <?php else: ?>
               <?php foreach ($materiasDelGrado as $m): ?>
                 <div class="materia-bloque">
@@ -249,8 +257,6 @@ include __DIR__ . '/../includes/header.php';
                     <?php
                       $esActivo   = (int)$a['activo'] === 1;
                       $nombreSafe = htmlspecialchars($a['materia_nombre']);
-                      $urlActivar = 'asignaciones_base.php?accion=activar&id=' . $a['id'];
-                      $urlDesact  = 'asignaciones_base.php?accion=desactivar&id=' . $a['id'];
                     ?>
                     <tr>
                       <td>
@@ -280,21 +286,18 @@ include __DIR__ . '/../includes/header.php';
                       </td>
                       <td class="acciones-cell">
                         <div class="table-actions">
-                          <?php if ($esActivo): ?>
-                            <button class="btn btn--sm btn--danger js-modal-trigger"
-                                    data-href="<?= $urlDesact ?>"
-                                    data-title="Desactivar asignación"
-                                    data-body="¿Confirmas desactivar <?= $nombreSafe ?>?">
-                              Desactivar
-                            </button>
-                          <?php else: ?>
-                            <button class="btn btn--sm btn--success js-modal-trigger"
-                                    data-href="<?= $urlActivar ?>"
-                                    data-title="Activar asignación"
-                                    data-body="¿Confirmas activar <?= $nombreSafe ?>?">
-                              Activar
-                            </button>
-                          <?php endif; ?>
+                          <a href="javascript:void(0)" class="btn btn--sm <?= $esActivo ? 'btn--warning' : 'btn--success' ?> action-btn"
+                             data-url="asignaciones_base.php?accion=<?= $esActivo ? 'desactivar' : 'activar' ?>&id=<?= $a['id'] ?>"
+                             data-title="<?= $esActivo ? 'Desactivar' : 'Activar' ?>"
+                             data-body="<?= $esActivo ? '¿Desactivar ' . $nombreSafe . '?' : '¿Activar ' . $nombreSafe . '?' ?>">
+                            <?= $esActivo ? 'Desactivar' : 'Activar' ?>
+                          </a>
+                          <a href="javascript:void(0)" class="btn btn--sm btn--danger action-btn"
+                             data-url="asignaciones_base.php?accion=eliminar&id=<?= $a['id'] ?>"
+                             data-title="Eliminar"
+                             data-body="¿ELIMINAR <?= $nombreSafe ?>? Esta acción NO se puede deshacer.">
+                            🗑️ Eliminar
+                          </a>
                         </div>
                       </td>
                     </tr>
@@ -309,6 +312,42 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <?php endif; ?>
 </main>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('confirmModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalCancel = document.getElementById('modalCancel');
+    
+    let currentUrl = '';
+    
+    document.querySelectorAll('.action-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentUrl = this.dataset.url;
+            modalTitle.textContent = this.dataset.title;
+            modalBody.textContent = this.dataset.body;
+            modal.style.display = 'flex';
+        });
+    });
+    
+    modalConfirm.addEventListener('click', function() {
+        window.location.href = currentUrl;
+    });
+    
+    modalCancel.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+    
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+});
+</script>
 
 <style>
 .asignaciones-layout {
@@ -331,6 +370,8 @@ include __DIR__ . '/../includes/header.php';
 .check-option input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary); }
 .check-option label { font-size: 0.8rem; color: var(--color-text); cursor: pointer; }
 .table-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; }
+.btn--warning { background: #f59e0b; color: white; }
+.btn--warning:hover { background: #d97706; }
 @media (max-width: 700px) { .asignaciones-layout { grid-template-columns: 1fr; } }
 </style>
 

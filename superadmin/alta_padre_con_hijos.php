@@ -45,11 +45,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'nombre' => $_POST["hijo_nombre_$i"] ?? '',
                     'curp' => $_POST["hijo_curp_$i"] ?? '',
                     'fecha_nacimiento' => $_POST["hijo_fecha_nacimiento_$i"] ?? '',
+                    'fecha_ingreso' => $_POST["hijo_fecha_ingreso_$i"] ?? date('Y-m-d'),
                     'genero' => $_POST["hijo_genero_$i"] ?? '',
                     'grado' => $_POST["hijo_grado_$i"] ?? 0,
                     'grupo' => $_POST["hijo_grupo_$i"] ?? '',
                     'seccion' => $_POST["hijo_seccion_$i"] ?? '',
-                    'estatus' => $_POST["hijo_estatus_$i"] ?? 'regular', // Nuevo campo estatus
+                    'estatus' => $_POST["hijo_estatus_$i"] ?? 'regular',
+                    'beca_interna' => isset($_POST["hijo_beca_interna_$i"]) && $_POST["hijo_beca_interna_$i"] !== '' ? (float)$_POST["hijo_beca_interna_$i"] : 0,
+                    'beca_externa' => isset($_POST["hijo_beca_externa_$i"]) && $_POST["hijo_beca_externa_$i"] !== '' ? (float)$_POST["hijo_beca_externa_$i"] : 0,
                     'padre_id' => $padreId,
                 ];
                 
@@ -325,27 +328,65 @@ const ESTATUS = [
     { value: 'baja', label: '❌ Baja', class: 'estatus-baja' }
 ];
 
-// Función para obtener el badge de sección
-function getSeccionBadge(seccion) {
-    const clases = {
-        'maternal': 'seccion-maternal',
-        'preescolar': 'seccion-preescolar',
-        'primaria': 'seccion-primaria',
-        'secundaria': 'seccion-secundaria'
-    };
-    return `<span class="seccion-badge ${clases[seccion] || ''}">${seccion.charAt(0).toUpperCase() + seccion.slice(1)}</span>`;
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
 }
 
-// Función para obtener el badge de estatus
-function getEstatusBadge(estatus) {
-    const est = ESTATUS.find(e => e.value === estatus);
-    if (est) {
-        return `<span class="estatus-badge ${est.class}">${est.label}</span>`;
+function actualizarBadgeSeccion(index, seccion) {
+    const badgeSpan = document.getElementById(`seccion-badge-${index}`);
+    if (badgeSpan) {
+        if (seccion) {
+            const clases = {
+                'maternal': 'seccion-maternal',
+                'preescolar': 'seccion-preescolar',
+                'primaria': 'seccion-primaria',
+                'secundaria': 'seccion-secundaria'
+            };
+            const texto = seccion.charAt(0).toUpperCase() + seccion.slice(1);
+            badgeSpan.innerHTML = `<span class="seccion-badge ${clases[seccion] || ''}">${texto}</span>`;
+            badgeSpan.style.display = 'inline';
+        } else {
+            badgeSpan.style.display = 'none';
+        }
     }
-    return '';
 }
 
-// Función para generar el HTML de un hijo
+function actualizarBadgeEstatus(index, estatus) {
+    const badgeSpan = document.getElementById(`estatus-badge-${index}`);
+    if (badgeSpan) {
+        if (estatus) {
+            const est = ESTATUS.find(e => e.value === estatus);
+            if (est) {
+                badgeSpan.innerHTML = `<span class="estatus-badge ${est.class}">${est.label}</span>`;
+                badgeSpan.style.display = 'inline';
+            } else {
+                badgeSpan.style.display = 'none';
+            }
+        } else {
+            badgeSpan.style.display = 'none';
+        }
+    }
+}
+
+function actualizarTodosLosBadges() {
+    for (let i = 1; i <= 6; i++) {
+        const selectSeccion = document.getElementById(`hijo_seccion_${i}`);
+        if (selectSeccion) {
+            actualizarBadgeSeccion(i, selectSeccion.value);
+        }
+        const selectEstatus = document.getElementById(`hijo_estatus_${i}`);
+        if (selectEstatus) {
+            actualizarBadgeEstatus(i, selectEstatus.value);
+        }
+    }
+}
+
 function generarHijoHTML(index, datos = null) {
     const defaultData = datos || {
         apellido_paterno: '',
@@ -353,11 +394,14 @@ function generarHijoHTML(index, datos = null) {
         nombre: '',
         curp: '',
         fecha_nacimiento: '',
+        fecha_ingreso: new Date().toISOString().split('T')[0],
         genero: '',
         grado: '',
         grupo: '',
         seccion: '',
-        estatus: 'regular'
+        estatus: 'regular',
+        beca_interna: '0',
+        beca_externa: '0'
     };
     
     let gradoOptions = '<option value="">Selecciona…</option>';
@@ -438,6 +482,14 @@ function generarHijoHTML(index, datos = null) {
                 </div>
                 
                 <div class="form-group">
+                    <label for="hijo_fecha_ingreso_${index}">Fecha de ingreso *</label>
+                    <input type="date" id="hijo_fecha_ingreso_${index}" 
+                           name="hijo_fecha_ingreso_${index}"
+                           value="${defaultData.fecha_ingreso}"
+                           required>
+                </div>
+                
+                <div class="form-group">
                     <label for="hijo_genero_${index}">Género *</label>
                     <select id="hijo_genero_${index}" name="hijo_genero_${index}" required>
                         ${generoOptions}
@@ -450,6 +502,24 @@ function generarHijoHTML(index, datos = null) {
                             required onchange="actualizarBadgeEstatus(${index}, this.value)">
                         ${estatusOptions}
                     </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="hijo_beca_interna_${index}">Beca interna</label>
+                    <input type="number" id="hijo_beca_interna_${index}" 
+                           name="hijo_beca_interna_${index}"
+                           step="0.01" min="0"
+                           value="${defaultData.beca_interna}"
+                           placeholder="0.00">
+                </div>
+                
+                <div class="form-group">
+                    <label for="hijo_beca_externa_${index}">Beca externa</label>
+                    <input type="number" id="hijo_beca_externa_${index}" 
+                           name="hijo_beca_externa_${index}"
+                           step="0.01" min="0"
+                           value="${defaultData.beca_externa}"
+                           placeholder="0.00">
                 </div>
                 
                 <div class="form-group">
@@ -478,65 +548,6 @@ function generarHijoHTML(index, datos = null) {
     `;
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
-}
-
-function actualizarBadgeSeccion(index, seccion) {
-    const badgeSpan = document.getElementById(`seccion-badge-${index}`);
-    if (badgeSpan) {
-        if (seccion) {
-            const clases = {
-                'maternal': 'seccion-maternal',
-                'preescolar': 'seccion-preescolar',
-                'primaria': 'seccion-primaria',
-                'secundaria': 'seccion-secundaria'
-            };
-            const texto = seccion.charAt(0).toUpperCase() + seccion.slice(1);
-            badgeSpan.innerHTML = `<span class="seccion-badge ${clases[seccion] || ''}">${texto}</span>`;
-            badgeSpan.style.display = 'inline';
-        } else {
-            badgeSpan.style.display = 'none';
-        }
-    }
-}
-
-function actualizarBadgeEstatus(index, estatus) {
-    const badgeSpan = document.getElementById(`estatus-badge-${index}`);
-    if (badgeSpan) {
-        if (estatus) {
-            const est = ESTATUS.find(e => e.value === estatus);
-            if (est) {
-                badgeSpan.innerHTML = `<span class="estatus-badge ${est.class}">${est.label}</span>`;
-                badgeSpan.style.display = 'inline';
-            } else {
-                badgeSpan.style.display = 'none';
-            }
-        } else {
-            badgeSpan.style.display = 'none';
-        }
-    }
-}
-
-function actualizarTodosLosBadges() {
-    for (let i = 1; i <= 6; i++) {
-        const selectSeccion = document.getElementById(`hijo_seccion_${i}`);
-        if (selectSeccion) {
-            actualizarBadgeSeccion(i, selectSeccion.value);
-        }
-        const selectEstatus = document.getElementById(`hijo_estatus_${i}`);
-        if (selectEstatus) {
-            actualizarBadgeEstatus(i, selectEstatus.value);
-        }
-    }
-}
-
 function actualizarHijos(numHijos) {
     const container = document.getElementById('hijos-container');
     const numActual = document.getElementById('num_hijos_actual');
@@ -553,11 +564,14 @@ function actualizarHijos(numHijos) {
                 nombre: document.getElementById(`hijo_nombre_${i}`)?.value || '',
                 curp: document.getElementById(`hijo_curp_${i}`)?.value || '',
                 fecha_nacimiento: document.getElementById(`hijo_fecha_nacimiento_${i}`)?.value || '',
+                fecha_ingreso: document.getElementById(`hijo_fecha_ingreso_${i}`)?.value || new Date().toISOString().split('T')[0],
                 genero: document.getElementById(`hijo_genero_${i}`)?.value || '',
                 grado: document.getElementById(`hijo_grado_${i}`)?.value || '',
                 grupo: document.getElementById(`hijo_grupo_${i}`)?.value || '',
                 seccion: document.getElementById(`hijo_seccion_${i}`)?.value || '',
-                estatus: document.getElementById(`hijo_estatus_${i}`)?.value || 'regular'
+                estatus: document.getElementById(`hijo_estatus_${i}`)?.value || 'regular',
+                beca_interna: document.getElementById(`hijo_beca_interna_${i}`)?.value || '0',
+                beca_externa: document.getElementById(`hijo_beca_externa_${i}`)?.value || '0'
             };
         }
     }
@@ -590,11 +604,14 @@ function removerHijo(index) {
                     nombre: document.getElementById(`hijo_nombre_${i}`)?.value || '',
                     curp: document.getElementById(`hijo_curp_${i}`)?.value || '',
                     fecha_nacimiento: document.getElementById(`hijo_fecha_nacimiento_${i}`)?.value || '',
+                    fecha_ingreso: document.getElementById(`hijo_fecha_ingreso_${i}`)?.value || new Date().toISOString().split('T')[0],
                     genero: document.getElementById(`hijo_genero_${i}`)?.value || '',
                     grado: document.getElementById(`hijo_grado_${i}`)?.value || '',
                     grupo: document.getElementById(`hijo_grupo_${i}`)?.value || '',
                     seccion: document.getElementById(`hijo_seccion_${i}`)?.value || '',
-                    estatus: document.getElementById(`hijo_estatus_${i}`)?.value || 'regular'
+                    estatus: document.getElementById(`hijo_estatus_${i}`)?.value || 'regular',
+                    beca_interna: document.getElementById(`hijo_beca_interna_${i}`)?.value || '0',
+                    beca_externa: document.getElementById(`hijo_beca_externa_${i}`)?.value || '0'
                 };
                 nuevosValores.push(datos);
             }

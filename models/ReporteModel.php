@@ -9,6 +9,15 @@ class ReporteModel {
         $this->db = $db;
     }
 
+    /**
+     * Redondea según la regla: >= .5 sube, < .5 baja
+     * Ej: 8.6 -> 9, 8.5 -> 9, 8.4 -> 8
+     */
+    private function redondearNota(?float $nota): ?float {
+        if ($nota === null) return null;
+        return round($nota, 0, PHP_ROUND_HALF_UP);
+    }
+
     private function periodosAbiertos(int $cicloId): array {
         $stmt = $this->db->prepare("SELECT periodo FROM periodos_apertura WHERE ciclo_id = ? ORDER BY periodo");
         $stmt->bind_param('i', $cicloId);
@@ -26,13 +35,17 @@ class ReporteModel {
         $stmt->bind_param('iii', $alumnoId, $asignacionId, $periodo);
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
-        return ($res && $res['promedio'] !== null) ? (float)$res['promedio'] : null;
+        $promedio = ($res && $res['promedio'] !== null) ? (float)$res['promedio'] : null;
+        return $this->redondearNota($promedio);
     }
 
     private function calcTrimestre(?float $p1, ?float $p2): ?float {
-        if ($p1 !== null && $p2 !== null) return round(($p1 + $p2) / 2, 1);
-        if ($p1 !== null) return $p1;
-        if ($p2 !== null) return $p2;
+        if ($p1 !== null && $p2 !== null) {
+            $promedio = ($p1 + $p2) / 2;
+            return $this->redondearNota($promedio);
+        }
+        if ($p1 !== null) return $this->redondearNota($p1);
+        if ($p2 !== null) return $this->redondearNota($p2);
         return null;
     }
 
@@ -103,8 +116,101 @@ class ReporteModel {
             $al['columnas'] = [];
 
             if ($agrupacion === 'materia') {
-                // Materias base (individuales)
+                // =========================================================
+                // VISTA POR MATERIA
+                // Mostrar: Lengua Materna, Inglés (promedio), Artes (promedio)
+                // y luego las demás materias base
+                // =========================================================
+                
+                // Separar Lengua Materna de las demás materias base
+                $lenguaMaterna = null;
+                $otrasMateriasBase = [];
+                
                 foreach ($materiasBase as $mat) {
+                    if ($mat['nombre'] === 'Lengua Materna') {
+                        $lenguaMaterna = $mat;
+                    } else {
+                        $otrasMateriasBase[] = $mat;
+                    }
+                }
+                
+                // 1. Mostrar Lengua Materna (si existe)
+                if ($lenguaMaterna) {
+                    $cals = [];
+                    for ($p = 1; $p <= 6; $p++) {
+                        $cals[$p] = in_array($p, $periodosAb) 
+                            ? $this->obtenerCalificacionMateria($al['alumno_id'], $lenguaMaterna['id'], $p) 
+                            : null;
+                    }
+                    $trims = [];
+                    for ($t = 1; $t <= 3; $t++) {
+                        $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
+                    }
+                    $valores = [];
+                    foreach ($colsSeleccionadas as $col) {
+                        $valores[$col] = $vista === 'periodo' ? $cals[$col] : $trims[$col];
+                    }
+                    $al['columnas'][] = ['key' => 'mat_' . $lenguaMaterna['id'], 'valor' => $valores];
+                }
+                
+                // 2. Promedio de INGLÉS (todas las materias de inglés juntas)
+                if (!empty($materiasIngles)) {
+                    $calsIngles = [];
+                    for ($p = 1; $p <= 6; $p++) {
+                        $suma = 0; $count = 0;
+                        foreach ($materiasIngles as $mat) {
+                            $cal = in_array($p, $periodosAb) 
+                                ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
+                                : null;
+                            if ($cal !== null) {
+                                $suma += $cal;
+                                $count++;
+                            }
+                        }
+                        $promedio = $count > 0 ? $suma / $count : null;
+                        $calsIngles[$p] = $promedio !== null ? $this->redondearNota($promedio) : null;
+                    }
+                    $trimsIngles = [];
+                    for ($t = 1; $t <= 3; $t++) {
+                        $trimsIngles[$t] = $this->calcTrimestre($calsIngles[$t*2-1], $calsIngles[$t*2]);
+                    }
+                    $valoresIngles = [];
+                    foreach ($colsSeleccionadas as $col) {
+                        $valoresIngles[$col] = $vista === 'periodo' ? $calsIngles[$col] : $trimsIngles[$col];
+                    }
+                    $al['columnas'][] = ['key' => 'ingles', 'valor' => $valoresIngles];
+                }
+
+                // 3. Promedio de ARTES (todas las materias de artes juntas)
+                if (!empty($materiasArtes)) {
+                    $calsArtes = [];
+                    for ($p = 1; $p <= 6; $p++) {
+                        $suma = 0; $count = 0;
+                        foreach ($materiasArtes as $mat) {
+                            $cal = in_array($p, $periodosAb) 
+                                ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
+                                : null;
+                            if ($cal !== null) {
+                                $suma += $cal;
+                                $count++;
+                            }
+                        }
+                        $promedio = $count > 0 ? $suma / $count : null;
+                        $calsArtes[$p] = $promedio !== null ? $this->redondearNota($promedio) : null;
+                    }
+                    $trimsArtes = [];
+                    for ($t = 1; $t <= 3; $t++) {
+                        $trimsArtes[$t] = $this->calcTrimestre($calsArtes[$t*2-1], $calsArtes[$t*2]);
+                    }
+                    $valoresArtes = [];
+                    foreach ($colsSeleccionadas as $col) {
+                        $valoresArtes[$col] = $vista === 'periodo' ? $calsArtes[$col] : $trimsArtes[$col];
+                    }
+                    $al['columnas'][] = ['key' => 'artes', 'valor' => $valoresArtes];
+                }
+                
+                // 4. Mostrar las demás materias base
+                foreach ($otrasMateriasBase as $mat) {
                     $cals = [];
                     for ($p = 1; $p <= 6; $p++) {
                         $cals[$p] = in_array($p, $periodosAb) 
@@ -121,191 +227,166 @@ class ReporteModel {
                     }
                     $al['columnas'][] = ['key' => 'mat_' . $mat['id'], 'valor' => $valores];
                 }
-                
-                // PROMEDIO DE INGLÉS (todas las materias de inglés juntas)
-                if (!empty($materiasIngles)) {
-                    $calsIngles = [];
-                    for ($p = 1; $p <= 6; $p++) {
-                        $suma = 0; $count = 0;
-                        foreach ($materiasIngles as $mat) {
-                            $cal = in_array($p, $periodosAb) 
-                                ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
-                                : null;
-                            if ($cal !== null) {
-                                $suma += $cal;
-                                $count++;
-                            }
-                        }
-                        $calsIngles[$p] = $count > 0 ? round($suma / $count, 1) : null;
-                    }
-                    $trimsIngles = [];
-                    for ($t = 1; $t <= 3; $t++) {
-                        $trimsIngles[$t] = $this->calcTrimestre($calsIngles[$t*2-1], $calsIngles[$t*2]);
-                    }
-                    $valoresIngles = [];
-                    foreach ($colsSeleccionadas as $col) {
-                        $valoresIngles[$col] = $vista === 'periodo' ? $calsIngles[$col] : $trimsIngles[$col];
-                    }
-                    $al['columnas'][] = ['key' => 'ingles', 'valor' => $valoresIngles];
-                }
-
-                // PROMEDIO DE ARTES (todas las materias de artes juntas)
-                if (!empty($materiasArtes)) {
-                    $calsArtes = [];
-                    for ($p = 1; $p <= 6; $p++) {
-                        $suma = 0; $count = 0;
-                        foreach ($materiasArtes as $mat) {
-                            $cal = in_array($p, $periodosAb) 
-                                ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
-                                : null;
-                            if ($cal !== null) {
-                                $suma += $cal;
-                                $count++;
-                            }
-                        }
-                        $calsArtes[$p] = $count > 0 ? round($suma / $count, 1) : null;
-                    }
-                    $trimsArtes = [];
-                    for ($t = 1; $t <= 3; $t++) {
-                        $trimsArtes[$t] = $this->calcTrimestre($calsArtes[$t*2-1], $calsArtes[$t*2]);
-                    }
-                    $valoresArtes = [];
-                    foreach ($colsSeleccionadas as $col) {
-                        $valoresArtes[$col] = $vista === 'periodo' ? $calsArtes[$col] : $trimsArtes[$col];
-                    }
-                    $al['columnas'][] = ['key' => 'artes', 'valor' => $valoresArtes];
-                }
 
             } else {
-                // Agrupar por campo formativo
+                // =========================================================
+                // VISTA POR CAMPO FORMATIVO (ORIGINAL)
+                // LENGUAJES con un solo promedio que incluye todo
+                // =========================================================
                 $campos = [];
                 foreach ($materiasBase as $mat) {
                     $campoKey = $mat['campo_id'] ?? 'sin_campo';
                     if (!isset($campos[$campoKey])) {
-                        $campos[$campoKey] = ['nombre' => $mat['campo_nombre'] ?? 'Sin campo', 'materias_ids' => []];
+                        $campos[$campoKey] = [
+                            'nombre' => $mat['campo_nombre'] ?? 'Sin campo', 
+                            'materias_ids' => [],
+                            'incluye_ingles' => false,
+                            'incluye_artes' => false
+                        ];
                     }
                     $campos[$campoKey]['materias_ids'][] = $mat['id'];
                 }
                 
+                // Campo LENGUAJES (incluye inglés y artes)
+                $campoLenguajesKey = null;
+                foreach ($campos as $key => $campo) {
+                    if ($campo['nombre'] === 'LENGUAJES') {
+                        $campoLenguajesKey = $key;
+                        break;
+                    }
+                }
+                
+                if ($campoLenguajesKey === null) {
+                    $campoLenguajesKey = 'lenguajes';
+                    $campos[$campoLenguajesKey] = [
+                        'nombre' => 'LENGUAJES',
+                        'materias_ids' => [],
+                        'incluye_ingles' => false,
+                        'incluye_artes' => false
+                    ];
+                }
+                
+                $campos[$campoLenguajesKey]['incluye_ingles'] = !empty($materiasIngles);
+                $campos[$campoLenguajesKey]['incluye_artes'] = !empty($materiasArtes);
+                
                 foreach ($campos as $campoKey => $campoData) {
                     $promCals = [];
+                    
                     for ($p = 1; $p <= 6; $p++) {
-                        if (in_array($p, $periodosAb)) {
-                            $suma = 0; $cont = 0;
-                            foreach ($campoData['materias_ids'] as $matId) {
+                        $suma = 0;
+                        $cont = 0;
+                        
+                        foreach ($campoData['materias_ids'] as $matId) {
+                            if (in_array($p, $periodosAb)) {
                                 $cal = $this->obtenerCalificacionMateria($al['alumno_id'], $matId, $p);
                                 if ($cal !== null) {
                                     $suma += $cal;
                                     $cont++;
                                 }
                             }
-                            $promCals[$p] = $cont > 0 ? round($suma / $cont, 1) : null;
-                        } else {
-                            $promCals[$p] = null;
                         }
+                        
+                        if ($campoData['incluye_ingles'] && !empty($materiasIngles)) {
+                            $sumaIngles = 0;
+                            $countIngles = 0;
+                            foreach ($materiasIngles as $mat) {
+                                $cal = in_array($p, $periodosAb) 
+                                    ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
+                                    : null;
+                                if ($cal !== null) {
+                                    $sumaIngles += $cal;
+                                    $countIngles++;
+                                }
+                            }
+                            $promIngles = $countIngles > 0 ? $sumaIngles / $countIngles : null;
+                            if ($promIngles !== null) {
+                                $suma += $promIngles;
+                                $cont++;
+                            }
+                        }
+                        
+                        if ($campoData['incluye_artes'] && !empty($materiasArtes)) {
+                            $sumaArtes = 0;
+                            $countArtes = 0;
+                            foreach ($materiasArtes as $mat) {
+                                $cal = in_array($p, $periodosAb) 
+                                    ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
+                                    : null;
+                                if ($cal !== null) {
+                                    $sumaArtes += $cal;
+                                    $countArtes++;
+                                }
+                            }
+                            $promArtes = $countArtes > 0 ? $sumaArtes / $countArtes : null;
+                            if ($promArtes !== null) {
+                                $suma += $promArtes;
+                                $cont++;
+                            }
+                        }
+                        
+                        $promedio = $cont > 0 ? $suma / $cont : null;
+                        $promCals[$p] = $promedio !== null ? $this->redondearNota($promedio) : null;
                     }
+                    
                     $promTrims = [];
                     for ($t = 1; $t <= 3; $t++) {
                         $promTrims[$t] = $this->calcTrimestre($promCals[$t*2-1], $promCals[$t*2]);
                     }
+                    
                     $valores = [];
                     foreach ($colsSeleccionadas as $col) {
                         $valores[$col] = $vista === 'periodo' ? $promCals[$col] : $promTrims[$col];
                     }
-                    $al['columnas'][] = ['key' => 'campo_' . $campoKey, 'valor' => $valores];
-                }
-                
-                // Campo de inglés
-                if (!empty($materiasIngles)) {
-                    $promCalsIngles = [];
-                    for ($p = 1; $p <= 6; $p++) {
-                        $suma = 0; $cont = 0;
-                        foreach ($materiasIngles as $mat) {
-                            $cal = in_array($p, $periodosAb) 
-                                ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
-                                : null;
-                            if ($cal !== null) {
-                                $suma += $cal;
-                                $cont++;
-                            }
-                        }
-                        $promCalsIngles[$p] = $cont > 0 ? round($suma / $cont, 1) : null;
-                    }
-                    $promTrimsIngles = [];
-                    for ($t = 1; $t <= 3; $t++) {
-                        $promTrimsIngles[$t] = $this->calcTrimestre($promCalsIngles[$t*2-1], $promCalsIngles[$t*2]);
-                    }
-                    $valoresIngles = [];
-                    foreach ($colsSeleccionadas as $col) {
-                        $valoresIngles[$col] = $vista === 'periodo' ? $promCalsIngles[$col] : $promTrimsIngles[$col];
-                    }
-                    $al['columnas'][] = ['key' => 'ingles', 'valor' => $valoresIngles];
-                }
-
-                // Campo de artes
-                if (!empty($materiasArtes)) {
-                    $promCalsArtes = [];
-                    for ($p = 1; $p <= 6; $p++) {
-                        $suma = 0; $cont = 0;
-                        foreach ($materiasArtes as $mat) {
-                            $cal = in_array($p, $periodosAb) 
-                                ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
-                                : null;
-                            if ($cal !== null) {
-                                $suma += $cal;
-                                $cont++;
-                            }
-                        }
-                        $promCalsArtes[$p] = $cont > 0 ? round($suma / $cont, 1) : null;
-                    }
-                    $promTrimsArtes = [];
-                    for ($t = 1; $t <= 3; $t++) {
-                        $promTrimsArtes[$t] = $this->calcTrimestre($promCalsArtes[$t*2-1], $promCalsArtes[$t*2]);
-                    }
-                    $valoresArtes = [];
-                    foreach ($colsSeleccionadas as $col) {
-                        $valoresArtes[$col] = $vista === 'periodo' ? $promCalsArtes[$col] : $promTrimsArtes[$col];
-                    }
-                    $al['columnas'][] = ['key' => 'artes', 'valor' => $valoresArtes];
+                    
+                    $al['columnas'][] = [
+                        'key' => 'campo_' . $campoKey, 
+                        'valor' => $valores
+                    ];
                 }
             }
 
-            // Promedio general
+            // Promedio general redondeado
             $todos = [];
             foreach ($al['columnas'] as $col) {
                 foreach ($col['valor'] as $v) {
                     if ($v !== null) $todos[] = $v;
                 }
             }
-            $al['promedio_general'] = !empty($todos) ? round(array_sum($todos) / count($todos), 1) : null;
+            $promGeneral = !empty($todos) ? array_sum($todos) / count($todos) : null;
+            $al['promedio_general'] = $promGeneral !== null ? $this->redondearNota($promGeneral) : null;
         }
 
         // Encabezados
         $encabezados = [];
         if ($agrupacion === 'materia') {
+            // Lengua Materna
             foreach ($materiasBase as $mat) {
-                $encabezados[] = ['key' => 'mat_' . $mat['id'], 'label' => $mat['nombre']];
-            }
-            if (!empty($materiasIngles)) {
-                $encabezados[] = ['key' => 'ingles', 'label' => 'Inglés'];
-            }
-            if (!empty($materiasArtes)) {
-                $encabezados[] = ['key' => 'artes', 'label' => 'Artes'];
-            }
-        } else {
-            $vistos = [];
-            foreach ($materiasBase as $mat) {
-                $campoKey = $mat['campo_id'] ?? 'sin_campo';
-                if (!in_array($campoKey, $vistos)) {
-                    $vistos[] = $campoKey;
-                    $encabezados[] = ['key' => 'campo_' . $campoKey, 'label' => $mat['campo_nombre'] ?? 'Sin campo'];
+                if ($mat['nombre'] === 'Lengua Materna') {
+                    $encabezados[] = ['key' => 'mat_' . $mat['id'], 'label' => $mat['nombre']];
+                    break;
                 }
             }
+            // Inglés
             if (!empty($materiasIngles)) {
                 $encabezados[] = ['key' => 'ingles', 'label' => 'Inglés'];
             }
+            // Artes
             if (!empty($materiasArtes)) {
                 $encabezados[] = ['key' => 'artes', 'label' => 'Artes'];
+            }
+            // Otras materias base
+            foreach ($materiasBase as $mat) {
+                if ($mat['nombre'] !== 'Lengua Materna') {
+                    $encabezados[] = ['key' => 'mat_' . $mat['id'], 'label' => $mat['nombre']];
+                }
+            }
+        } else {
+            // Campos formativos
+            foreach ($campos as $campoKey => $campoData) {
+                $encabezados[] = [
+                    'key' => 'campo_' . $campoKey, 
+                    'label' => $campoData['nombre']
+                ];
             }
         }
 

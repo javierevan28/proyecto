@@ -86,19 +86,18 @@ include __DIR__ . '/../includes/header.php';
 
           <span class="badge">Estudiante</span>
 
-          <!-- Botón documentos -->
-          <a class="btn btn--sm btn--success"
-             href="documentos.php?alumno_id=<?= $hijo['id'] ?>"
-             style="margin-top:.8rem; display:inline-block; margin-right:0.5rem;">
-            📄 Subir documentos
-          </a>
-
-          <!-- Botón boleta -->
-          <a class="btn btn--sm btn--accent"
-             href="boleta.php?alumno_id=<?= $hijo['id'] ?>"
-             style="margin-top:.8rem; display:inline-block;">
-            Ver boleta
-          </a>
+          <!-- Botones de acciones -->
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.8rem; flex-wrap: wrap;">
+            <a class="btn btn--sm btn--success" href="documentos.php?alumno_id=<?= $hijo['id'] ?>">
+              📄 Subir documentos
+            </a>
+            <a class="btn btn--sm btn--accent" href="boleta.php?alumno_id=<?= $hijo['id'] ?>">
+              📋 Ver boleta
+            </a>
+            <a class="btn btn--sm btn--accent" href="boleta_ingles.php?alumno_id=<?= $hijo['id'] ?>" style="background: #1e40af;">
+              🌐 Ver boleta de Inglés
+            </a>
+          </div>
 
         </article>
       <?php endforeach; ?>

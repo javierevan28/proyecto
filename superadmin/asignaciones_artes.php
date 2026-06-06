@@ -11,29 +11,43 @@ require_once __DIR__ . '/../models/ArteSubcomponenteModel.php';
 require_once __DIR__ . '/../models/UserModel.php';
 requireRol([1]);
 
-$db            = getConexion();
-$asigModelo    = new AsignacionModel($db);
-$cicloModelo   = new CicloModel($db);
+$db = getConexion();
+$asigModelo = new AsignacionModel($db);
+$cicloModelo = new CicloModel($db);
 $materiaModelo = new MateriaModel($db);
-$campoModelo   = new CampoFormativoModel($db);
-$profModelo    = new ProfesorModel($db, new UserModel($db));
-$artesModelo   = new ArteSubcomponenteModel($db);
+$campoModelo = new CampoFormativoModel($db);
+$profModelo = new ProfesorModel($db, new UserModel($db));
+$artesModelo = new ArteSubcomponenteModel($db);
 
 $resultado = null;
-$accion    = $_GET['accion'] ?? '';
-$editId    = (int)($_GET['id'] ?? 0);
+$accion = $_GET['accion'] ?? '';
+$editId = (int)($_GET['id'] ?? 0);
 
-if ($accion === 'desactivar' && $editId > 0) {
-    $resultado = $asigModelo->toggleActivo($editId, 0);
-    $msg = isset($resultado['success']) ? 'desactivado' : 'error';
-    header('Location: asignaciones_artes.php?msg=' . $msg . '&detalle=' . urlencode($resultado['error'] ?? ''));
+// ACTIVAR
+if ($accion === 'activar' && $editId > 0) {
+    $stmt = $db->prepare("UPDATE asignaciones SET activo = 1 WHERE id = ?");
+    $stmt->bind_param('i', $editId);
+    $stmt->execute();
+    header('Location: asignaciones_artes.php?msg=activado');
     exit;
 }
 
-if ($accion === 'activar' && $editId > 0) {
-    $resultado = $asigModelo->toggleActivo($editId, 1);
-    $msg = isset($resultado['success']) ? 'activado' : 'error';
-    header('Location: asignaciones_artes.php?msg=' . $msg . '&detalle=' . urlencode($resultado['error'] ?? ''));
+// DESACTIVAR
+if ($accion === 'desactivar' && $editId > 0) {
+    $stmt = $db->prepare("UPDATE asignaciones SET activo = 0 WHERE id = ?");
+    $stmt->bind_param('i', $editId);
+    $stmt->execute();
+    header('Location: asignaciones_artes.php?msg=desactivado');
+    exit;
+}
+
+// ELIMINAR
+if ($accion === 'eliminar' && $editId > 0) {
+    $db->query("DELETE FROM asignacion_maestros WHERE asignacion_id = $editId");
+    $db->query("DELETE FROM asignacion_artes WHERE asignacion_id = $editId");
+    $db->query("DELETE FROM asignacion_ingles_aspectos WHERE asignacion_id = $editId");
+    $db->query("DELETE FROM asignaciones WHERE id = $editId");
+    header('Location: asignaciones_artes.php?msg=eliminado');
     exit;
 }
 
@@ -41,15 +55,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $resultado = $asigModelo->crearLote($_POST);
 }
 
-$msgRedir  = $_GET['msg']     ?? '';
+$msgRedir = $_GET['msg'] ?? '';
 $msgDetall = $_GET['detalle'] ?? '';
 
 $cicloActivo = $cicloModelo->obtenerActivo();
 
-$campos         = $campoModelo->listarActivos();
-$subcomps       = $artesModelo->listarActivos();
-$titulares      = $profModelo->listarActivosPorTipo('titular');
-$frances        = $profModelo->listarActivosPorTipo('frances');
+$campos = $campoModelo->listarActivos();
+$subcomps = $artesModelo->listarActivos();
 $cocurriculares = $profModelo->listarActivosPorTipo('cocurricular');
 
 $todasAsignaciones = $cicloActivo
@@ -69,267 +81,228 @@ foreach ($todasAsignaciones as $key => $grupo) {
     }
 }
 
-// Obtener materias por grado si ya hay selección
 $seccionSeleccionada = $_GET['seccion'] ?? '';
 $gradoSeleccionado = $_GET['grado'] ?? '';
 $grupoSeleccionado = $_GET['grupo'] ?? '';
 $materiasDelGrado = [];
 
-if ($seccionSeleccionada && $gradoSeleccionado) {
+if ($seccionSeleccionada && $gradoSeleccionado && $cicloActivo) {
     $stmt = $db->prepare("
-        SELECT m.id, m.nombre, m.campo_formativo_id
+        SELECT m.id, m.nombre, m.campo_formativo_id, gm.orden
         FROM grados_materias gm
         JOIN materias m ON m.id = gm.materia_id
         WHERE gm.seccion = ? AND gm.grado = ? AND m.es_artes = 1
+        AND NOT EXISTS (
+            SELECT 1 FROM asignaciones a 
+            WHERE a.ciclo_id = ? 
+            AND a.seccion = gm.seccion 
+            AND a.grado = gm.grado 
+            AND a.grupo = ? 
+            AND a.materia_id = m.id
+        )
         ORDER BY gm.orden ASC
     ");
-    $stmt->bind_param('si', $seccionSeleccionada, $gradoSeleccionado);
+    $stmt->bind_param('siis', $seccionSeleccionada, $gradoSeleccionado, $cicloActivo['id'], $grupoSeleccionado);
     $stmt->execute();
     $materiasDelGrado = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 }
 
 $pageTitle = 'Superadmin › Asignaciones - Artes';
-$backLink  = 'dashboard.php';
-$scripts   = ['/proyecto/js/modal.js'];
+$backLink = 'dashboard.php';
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
-  <div class="modal">
-    <h3 class="modal__title" id="modalTitle"></h3>
-    <p class="modal__body" id="modalBody"></p>
-    <div class="modal__actions">
-      <a class="btn modal__confirm" id="modalConfirm" href="#">Confirmar</a>
-      <button class="btn modal__cancel" id="modalCancel" type="button">Cancelar</button>
+<!-- MODAL PERSONALIZADO -->
+<div id="confirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:12px; padding:20px; max-width:400px; margin:auto; box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+        <h3 id="modalTitle" style="margin-bottom:15px; color:#1e3a5f;">Confirmar</h3>
+        <p id="modalBody" style="margin-bottom:20px;">¿Estás seguro de realizar esta acción?</p>
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button id="modalCancel" class="btn" style="background:#e2e8f0; color:#333;">Cancelar</button>
+            <a id="modalConfirm" class="btn" style="background:#dc2626; color:white;">Confirmar</a>
+        </div>
     </div>
-  </div>
 </div>
 
 <main class="container">
-
-  <?php if ($resultado): ?>
-    <?php if (isset($resultado['success'])): ?>
-      <p class="alert alert--success">
-        ✅ <?= $resultado['creadas'] ?> asignación(es) creada(s).
-        <?= ($resultado['omitidas'] ?? 0) > 0 ? ($resultado['omitidas'] ?? 0) . ' ya existían y se actualizaron.' : '' ?>
-      </p>
-    <?php else: ?>
-      <p class="alert alert--error">⚠️ <?= htmlspecialchars($resultado['error']) ?></p>
-    <?php endif; ?>
-  <?php endif; ?>
 
   <?php if ($msgRedir === 'activado'): ?>
     <p class="alert alert--success">✅ Asignación activada.</p>
   <?php elseif ($msgRedir === 'desactivado'): ?>
     <p class="alert alert--success">✅ Asignación desactivada.</p>
-  <?php elseif ($msgRedir === 'error'): ?>
-    <p class="alert alert--error">⚠️ <?= htmlspecialchars($msgDetall) ?></p>
+  <?php elseif ($msgRedir === 'eliminado'): ?>
+    <p class="alert alert--success">✅ Asignación ELIMINADA correctamente.</p>
   <?php endif; ?>
 
   <?php if (!$cicloActivo): ?>
-    <p class="alert alert--error">
-      ⚠️ No hay un ciclo escolar activo.
-      <a href="ciclos_escolares.php">Configura uno primero</a>.
-    </p>
+    <p class="alert alert--error">⚠️ No hay un ciclo escolar activo.</p>
   <?php else: ?>
 
-  <div class="asignaciones-layout">
-    <div class="asignaciones-formulario">
-      <section class="card">
-        <h2 class="section-title">🎨 Nueva asignación - Artes</h2>
-        <p class="form-hint" style="margin-bottom:1rem;">
-          Ciclo: <strong><?= htmlspecialchars($cicloActivo['nombre']) ?></strong>
-        </p>
+  <div style="display: grid; grid-template-columns: 1fr 1.8fr; gap: 1.5rem;">
+    <!-- FORMULARIO PARA NUEVAS ASIGNACIONES -->
+    <div class="card">
+      <h2 class="section-title">🎨 Nueva asignación - Artes</h2>
+      <p class="form-hint">Ciclo: <strong><?= htmlspecialchars($cicloActivo['nome']) ?></strong></p>
 
-        <form method="GET" id="form-filtros" style="margin-bottom: 1rem;">
-          <div class="form-group">
-            <label for="seccion">Sección *</label>
-            <select id="seccion" name="seccion" required onchange="this.form.submit()">
-              <option value="">Selecciona…</option>
-              <?php foreach (['maternal','preescolar','primaria','secundaria'] as $sec): ?>
-                <option value="<?= $sec ?>" <?= $seccionSeleccionada === $sec ? 'selected' : '' ?>><?= ucfirst($sec) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
+      <form method="GET" style="margin-bottom: 1rem;">
+        <div class="form-group">
+          <label for="seccion">Sección</label>
+          <select name="seccion" id="seccion" onchange="this.form.submit()" required>
+            <option value="">Selecciona...</option>
+            <?php foreach (['maternal','preescolar','primaria','secundaria'] as $sec): ?>
+              <option value="<?= $sec ?>" <?= $seccionSeleccionada === $sec ? 'selected' : '' ?>><?= ucfirst($sec) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="grado">Grado</label>
+          <select name="grado" id="grado" onchange="this.form.submit()" required>
+            <option value="">Selecciona...</option>
+            <?php for ($i = 1; $i <= 6; $i++): ?>
+              <option value="<?= $i ?>" <?= $gradoSeleccionado == $i ? 'selected' : '' ?>><?= $i ?>°</option>
+            <?php endfor; ?>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="grupo">Grupo</label>
+          <select name="grupo" id="grupo" onchange="this.form.submit()" required>
+            <option value="">Selecciona...</option>
+            <?php foreach (['A','B','C','D'] as $grp): ?>
+              <option value="<?= $grp ?>" <?= $grupoSeleccionado === $grp ? 'selected' : '' ?>><?= $grp ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      </form>
 
-          <div class="form-group">
-            <label for="grado">Grado *</label>
-            <select id="grado" name="grado" required onchange="this.form.submit()">
-              <option value="">Selecciona…</option>
-              <?php for ($i = 1; $i <= 6; $i++): ?>
-                <option value="<?= $i ?>" <?= $gradoSeleccionado == $i ? 'selected' : '' ?>><?= $i ?>°</option>
-              <?php endfor; ?>
-            </select>
-          </div>
+      <?php if ($seccionSeleccionada && $gradoSeleccionado && $grupoSeleccionado): ?>
+        <form method="POST">
+          <input type="hidden" name="ciclo_id" value="<?= $cicloActivo['id'] ?>">
+          <input type="hidden" name="seccion" value="<?= $seccionSeleccionada ?>">
+          <input type="hidden" name="grado" value="<?= $gradoSeleccionado ?>">
+          <input type="hidden" name="grupo" value="<?= $grupoSeleccionado ?>">
 
-          <div class="form-group">
-            <label for="grupo">Grupo *</label>
-            <select id="grupo" name="grupo" required onchange="this.form.submit()">
-              <option value="">Selecciona…</option>
-              <?php foreach (['A','B','C','D'] as $grp): ?>
-                <option value="<?= $grp ?>" <?= $grupoSeleccionado === $grp ? 'selected' : '' ?>><?= $grp ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-        </form>
-
-        <?php if ($seccionSeleccionada && $gradoSeleccionado && $grupoSeleccionado): ?>
-          <form method="POST" id="form-asignacion" novalidate>
-            <input type="hidden" name="ciclo_id" value="<?= $cicloActivo['id'] ?>">
-            <input type="hidden" name="seccion" value="<?= $seccionSeleccionada ?>">
-            <input type="hidden" name="grado" value="<?= $gradoSeleccionado ?>">
-            <input type="hidden" name="grupo" value="<?= $grupoSeleccionado ?>">
-
-            <hr class="separator">
-            <p class="form-hint" style="margin-bottom:.8rem;">
-              Selecciona las materias y asigna un maestro a cada una:
-            </p>
-            
-            <?php if (empty($materiasDelGrado)): ?>
-              <p class="alert alert--warn">No hay materias de Artes asignadas a este grado. Ve a "Materias por grado" y asigna materias primero.</p>
-            <?php else: ?>
-              <?php foreach ($materiasDelGrado as $m): ?>
-                <div class="materia-bloque">
-                  <div class="materia-header">
-                    <strong><?= htmlspecialchars($m['nombre']) ?></strong>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-hint">Maestro asignado</label>
-                    <select name="materia[<?= $m['id'] ?>][profesor_id]" class="form-control">
-                      <option value="">Seleccionar maestro...</option>
-                      <?php foreach ($cocurriculares as $p): ?>
-                        <option value="<?= $p['id'] ?>"><?= htmlspecialchars($p['apellido_paterno'] . ' ' . ($p['apellido_materno'] ?? '') . ', ' . $p['nombre']) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                  </div>
-                  <div class="check-option">
-                    <input type="checkbox" name="materia[<?= $m['id'] ?>][es_titular]" value="1" id="titular_<?= $m['id'] ?>">
-                    <label for="titular_<?= $m['id'] ?>">Es titular de este grupo</label>
-                  </div>
-                  <input type="hidden" name="materia[<?= $m['id'] ?>][campo_formativo_id]" value="<?= $m['campo_formativo_id'] ?? '' ?>">
-                  <input type="hidden" name="materia[<?= $m['id'] ?>][orden]" value="0">
+          <?php if (empty($materiasDelGrado)): ?>
+            <p class="alert alert--success">✅ Todas las materias de Artes ya están asignadas.</p>
+          <?php else: ?>
+            <?php foreach ($materiasDelGrado as $m): ?>
+              <div style="border:1px solid #ccc; padding:0.8rem; margin-bottom:0.8rem; border-radius:8px;">
+                <strong><?= htmlspecialchars($m['nombre']) ?></strong>
+                <div class="form-group" style="margin-top:0.5rem;">
+                  <label>Maestro</label>
+                  <select name="materia[<?= $m['id'] ?>][profesor_id]" class="form-control" required>
+                    <option value="">Seleccionar...</option>
+                    <?php foreach ($cocurriculares as $p): ?>
+                      <option value="<?= $p['id'] ?>"><?= htmlspecialchars($p['apellido_paterno'] . ' ' . ($p['apellido_materno'] ?? '') . ', ' . $p['nombre']) ?></option>
+                    <?php endforeach; ?>
+                  </select>
                 </div>
-              <?php endforeach; ?>
-              <button class="btn" type="submit">Guardar asignaciones</button>
-            <?php endif; ?>
-          </form>
-        <?php endif; ?>
-      </section>
+                <div>
+                  <input type="checkbox" name="materia[<?= $m['id'] ?>][es_titular]" value="1" id="titular_<?= $m['id'] ?>">
+                  <label for="titular_<?= $m['id'] ?>">Es titular</label>
+                </div>
+                <input type="hidden" name="materia[<?= $m['id'] ?>][campo_formativo_id]" value="<?= $m['campo_formativo_id'] ?? '' ?>">
+                <input type="hidden" name="materia[<?= $m['id'] ?>][orden]" value="<?= $m['orden'] ?? 0 ?>">
+                <input type="hidden" name="materia[<?= $m['id'] ?>][es_artes]" value="1">
+              </div>
+            <?php endforeach; ?>
+            <button type="submit" name="guardar" class="btn">💾 Guardar asignaciones</button>
+          <?php endif; ?>
+        </form>
+      <?php endif; ?>
     </div>
 
-    <div class="asignaciones-listado">
-      <section>
-        <h2 class="section-title">
-          Asignaciones — <?= htmlspecialchars($cicloActivo['nombre']) ?>
-        </h2>
-
-        <?php if (empty($asignaciones)): ?>
-          <p class="empty-state">Aún no hay asignaciones de Artes para este ciclo.</p>
-        <?php else: ?>
-          <?php foreach ($asignaciones as $key => $grupo): ?>
-            <?php $primera = $grupo[0]; ?>
-            <div class="grupo-asignaciones">
-              <h3 class="grupo-titulo">
-                🎨 <?= ucfirst($primera['seccion']) ?> — <?= $primera['grado'] ?>° <?= $primera['grupo'] ?>
-              </h3>
-              <table class="data-table">
-                <thead>
+    <!-- LISTADO DE ASIGNACIONES EXISTENTES -->
+    <div class="card">
+      <h2 class="section-title">📋 Asignaciones actuales</h2>
+      <?php if (empty($asignaciones)): ?>
+        <p class="empty-state">No hay asignaciones de Artes.</p>
+      <?php else: ?>
+        <?php foreach ($asignaciones as $key => $grupo): ?>
+          <?php $primera = $grupo[0]; ?>
+          <div style="margin-bottom: 1.5rem;">
+            <h3 style="color:var(--color-primary);">🎨 <?= ucfirst($primera['seccion']) ?> — <?= $primera['grado'] ?>° <?= $primera['grupo'] ?></h3>
+            <table class="data-table" style="width:100%; font-size:0.8rem;">
+              <thead>
+                <tr><th>Materia</th><th>Maestro(s)</th><th>Estado</th><th>Acciones</th></tr>
+              </thead>
+              <tbody>
+                <?php foreach ($grupo as $a): ?>
+                  <?php
+                  $esActivo = (int)$a['activo'] === 1;
+                  $nombreSafe = htmlspecialchars($a['materia_nombre']);
+                  ?>
                   <tr>
-                    <th>Materia</th>
-                    <th>Campo formativo</th>
-                    <th>Maestro(s)</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
+                    <td><strong><?= $nombreSafe ?></strong></td>
+                    <td><?= $a['maestros'] ? htmlspecialchars($a['maestros']) : '—' ?></td>
+                    <td><?= $esActivo ? '✅ Activo' : '❌ Inactivo' ?></td>
+                    <td>
+                      <a href="javascript:void(0)" class="btn btn--sm <?= $esActivo ? 'btn--warning' : 'btn--success' ?> action-btn"
+                         data-url="?accion=<?= $esActivo ? 'desactivar' : 'activar' ?>&id=<?= $a['id'] ?>"
+                         data-title="<?= $esActivo ? 'Desactivar' : 'Activar' ?>"
+                         data-body="<?= $esActivo ? '¿Desactivar ' . $nombreSafe . '?' : '¿Activar ' . $nombreSafe . '?' ?>">
+                        <?= $esActivo ? 'Desactivar' : 'Activar' ?>
+                      </a>
+                      <a href="javascript:void(0)" class="btn btn--sm btn--danger action-btn"
+                         data-url="?accion=eliminar&id=<?= $a['id'] ?>"
+                         data-title="Eliminar"
+                         data-body="¿ELIMINAR <?= $nombreSafe ?>? Esta acción NO se puede deshacer.">
+                        🗑️ Eliminar
+                      </a>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  <?php foreach ($grupo as $a): ?>
-                    <?php
-                      $esActivo   = (int)$a['activo'] === 1;
-                      $nombreSafe = htmlspecialchars($a['materia_nombre']);
-                      $urlActivar = 'asignaciones_artes.php?accion=activar&id=' . $a['id'];
-                      $urlDesact  = 'asignaciones_artes.php?accion=desactivar&id=' . $a['id'];
-                    ?>
-                    <tr>
-                      <td>
-                        <strong><?= $nombreSafe ?></strong>
-                        <?php if ((int)($a['hay_titular'] ?? 0)): ?>
-                          <span class="badge badge--active">Titular</span>
-                        <?php endif; ?>
-                      </td>
-                      <td>
-                        <?= $a['campo_formativo_nombre']
-                            ? htmlspecialchars($a['campo_formativo_nombre'])
-                            : '<span class="form-hint">—</span>'
-                        ?>
-                      </td>
-                      <td class="maestros-cell">
-                        <?= $a['maestros']
-                            ? htmlspecialchars($a['maestros'])
-                            : '<span class="form-hint">Sin asignar</span>'
-                        ?>
-                      </td>
-                      <td class="estado-cell">
-                        <?php if ($esActivo): ?>
-                          <span class="badge badge--active">Activo</span>
-                        <?php else: ?>
-                          <span class="badge badge--warn">Inactivo</span>
-                        <?php endif; ?>
-                      </td>
-                      <td class="acciones-cell">
-                        <div class="table-actions">
-                          <?php if ($esActivo): ?>
-                            <button class="btn btn--sm btn--danger js-modal-trigger"
-                                    data-href="<?= $urlDesact ?>"
-                                    data-title="Desactivar asignación"
-                                    data-body="¿Confirmas desactivar <?= $nombreSafe ?>?">
-                              Desactivar
-                            </button>
-                          <?php else: ?>
-                            <button class="btn btn--sm btn--success js-modal-trigger"
-                                    data-href="<?= $urlActivar ?>"
-                                    data-title="Activar asignación"
-                                    data-body="¿Confirmas activar <?= $nombreSafe ?>?">
-                              Activar
-                            </button>
-                          <?php endif; ?>
-                        </div>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
-            </div>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </section>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
   </div>
   <?php endif; ?>
 </main>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('confirmModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalCancel = document.getElementById('modalCancel');
+    
+    let currentUrl = '';
+    
+    document.querySelectorAll('.action-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentUrl = this.dataset.url;
+            modalTitle.textContent = this.dataset.title;
+            modalBody.textContent = this.dataset.body;
+            modal.style.display = 'flex';
+        });
+    });
+    
+    modalConfirm.addEventListener('click', function() {
+        window.location.href = currentUrl;
+    });
+    
+    modalCancel.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+    
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+});
+</script>
+
 <style>
-.asignaciones-layout {
-  display: grid;
-  grid-template-columns: 1fr 1.8fr;
-  gap: 1.5rem;
-  align-items: start;
-}
-.asignaciones-formulario, .asignaciones-listado { min-width: 0; }
-.separator { margin: 1rem 0; border: none; border-top: 1px solid var(--color-border); }
-.grupo-asignaciones { margin-bottom: 1.5rem; }
-.grupo-titulo { font-size: 0.95rem; color: var(--color-primary); margin-bottom: 0.5rem; }
-.estado-cell, .acciones-cell { text-align: center; }
-.materia-bloque { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.8rem; margin-bottom: 0.8rem; background: var(--color-surface); }
-.materia-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-border); font-weight: 600; color: var(--color-primary); }
-.form-group { margin-bottom: 0.8rem; }
-.form-group label { display: block; font-size: 0.75rem; color: var(--color-muted); margin-bottom: 0.3rem; }
-.form-control { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #ccd3db; border-radius: var(--radius-sm); font-size: 0.85rem; background: var(--color-surface); }
-.check-option { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
-.check-option input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary); }
-.check-option label { font-size: 0.8rem; color: var(--color-text); cursor: pointer; }
-.table-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; }
-@media (max-width: 700px) { .asignaciones-layout { grid-template-columns: 1fr; } }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: 0.75rem; margin-bottom: 0.3rem; color: #666; }
+.form-control { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+.btn--warning { background: #f59e0b; color: white; }
+.btn--warning:hover { background: #d97706; }
 </style>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

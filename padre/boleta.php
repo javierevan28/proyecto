@@ -21,7 +21,6 @@ if (!$padre) { header('Location: /proyecto/login.php'); exit; }
 $cicloActivo = $cicloModelo->obtenerActivo();
 $alumnoId    = (int)($_GET['alumno_id'] ?? 0);
 
-// Verificar que el alumno es hijo del padre
 $hijos = $alumnoModel->obtenerPorPadreId((int)$padre['id']);
 $alumnoValido = false;
 foreach ($hijos as $h) {
@@ -35,22 +34,192 @@ if (!$alumnoValido || !$cicloActivo) {
 
 $boleta = $boletaModel->obtenerBoleta($alumnoId, (int)$cicloActivo['id']);
 
-// Encontrar asignación de inglés para la boleta de inglés
-$asignacionInglesId = null;
-foreach ($boleta['materias'] ?? [] as $m) {
-    if ((int)$m['es_ingles']) {
-        $asignacionInglesId = (int)$m['asignacion_id'];
-        break;
-    }
-}
-
-$boletaIngles = $asignacionInglesId
-    ? $boletaModel->obtenerBoletaIngles($alumnoId, (int)$cicloActivo['id'], $asignacionInglesId)
-    : null;
-
 $alumno    = $boleta['alumno']   ?? [];
 $porCampo  = $boleta['porCampo'] ?? [];
 $periodosAbiertos = $boleta['periodosAbiertos'] ?? [];
+
+// ============================================================
+// FUNCIÓN PARA ASIGNAR CAMPO FORMATIVO SEGÚN LA MATERIA
+// ============================================================
+function asignarCampoFormativo($nombreMateria) {
+    $materia = strtolower(trim($nombreMateria));
+    
+    // SABERES Y PENSAMIENTO CIENTÍFICO
+    if (strpos($materia, 'matem') !== false || 
+        strpos($materia, 'ciencia') !== false ||
+        strpos($materia, 'biología') !== false ||
+        strpos($materia, 'biologia') !== false ||
+        strpos($materia, 'química') !== false ||
+        strpos($materia, 'quimica') !== false ||
+        strpos($materia, 'física') !== false ||
+        strpos($materia, 'fisica') !== false) {
+        return 'SABERES Y PENSAMIENTO CIENTÍFICO';
+    }
+    
+    // LENGUAJES
+    if (strpos($materia, 'lengua') !== false || 
+        strpos($materia, 'español') !== false ||
+        strpos($materia, 'comunicación') !== false ||
+        strpos($materia, 'lectura') !== false ||
+        strpos($materia, 'inglés') !== false ||
+        strpos($materia, 'ingles') !== false ||
+        strpos($materia, 'lenguaje') !== false ||
+        strpos($materia, 'literatura') !== false) {
+        return 'LENGUAJES';
+    }
+    
+    // ÉTICA, NATURALEZA Y SOCIEDADES
+    if (strpos($materia, 'ética') !== false || 
+        strpos($materia, 'etica') !== false ||
+        strpos($materia, 'cívica') !== false ||
+        strpos($materia, 'civica') !== false ||
+        strpos($materia, 'valores') !== false ||
+        strpos($materia, 'historia') !== false ||
+        strpos($materia, 'geografía') !== false ||
+        strpos($materia, 'geografia') !== false ||
+        strpos($materia, 'sociales') !== false ||
+        strpos($materia, 'formación') !== false) {
+        return 'ÉTICA, NATURALEZA Y SOCIEDADES';
+    }
+    
+    // DE LO HUMANO Y LO COMUNITARIO
+    if (strpos($materia, 'tutoría') !== false || 
+        strpos($materia, 'tutoria') !== false ||
+        strpos($materia, 'comunitario') !== false ||
+        strpos($materia, 'humano') !== false ||
+        strpos($materia, 'convivencia') !== false) {
+        return 'DE LO HUMANO Y LO COMUNITARIO';
+    }
+    
+    // EDUCACIÓN FÍSICA
+    if (strpos($materia, 'educación física') !== false || 
+        strpos($materia, 'educacion fisica') !== false ||
+        strpos($materia, 'deporte') !== false) {
+        return 'EDUCACIÓN FÍSICA';
+    }
+    
+    return 'OTROS CAMPOS FORMATIVOS';
+}
+
+// ============================================================
+// FUNCIÓN PARA CALCULAR PROMEDIO DE SUBMATERIAS (como Artes)
+// ============================================================
+function calcularPromedioSubmaterias($submaterias, $periodo) {
+    $suma = 0;
+    $count = 0;
+    foreach ($submaterias as $sub) {
+        $cal = $sub['calificaciones'][$periodo] ?? null;
+        if ($cal !== null && is_numeric($cal)) {
+            $suma += $cal;
+            $count++;
+        }
+    }
+    return $count > 0 ? round($suma / $count, 1) : null;
+}
+
+// ============================================================
+// AGRUPAR MATERIAS Y SUS SUBMATERIAS (Música, Danza, Teatro van dentro de Artes)
+// ============================================================
+$materiasPrincipales = [];
+$submaterias = [];
+
+foreach ($porCampo as $campoViejo => $materias) {
+    foreach ($materias as $materia) {
+        $nombre = $materia['materia_nombre'];
+        $nombreLower = strtolower($nombre);
+        
+        // Detectar si es una submateria de Artes
+        $esSubmateriaArtes = (strpos($nombreLower, 'música') !== false || 
+                               strpos($nombreLower, 'musica') !== false ||
+                               strpos($nombreLower, 'danza') !== false ||
+                               strpos($nombreLower, 'teatro') !== false ||
+                               strpos($nombreLower, 'dibujo') !== false ||
+                               strpos($nombreLower, 'pintura') !== false ||
+                               strpos($nombreLower, 'escultura') !== false ||
+                               strpos($nombreLower, 'plástica') !== false ||
+                               strpos($nombreLower, 'artes visuales') !== false);
+        
+        if ($esSubmateriaArtes) {
+            // Es una submateria de Artes
+            if (!isset($submaterias['ARTES'])) {
+                $submaterias['ARTES'] = [];
+            }
+            $submaterias['ARTES'][] = $materia;
+        } else {
+            // Es materia principal
+            $campoReal = asignarCampoFormativo($nombre);
+            if (!isset($materiasPrincipales[$campoReal])) {
+                $materiasPrincipales[$campoReal] = [];
+            }
+            $materiasPrincipales[$campoReal][] = $materia;
+        }
+    }
+}
+
+// Crear la materia ARTES con sus promedios calculados
+if (isset($submaterias['ARTES']) && !empty($submaterias['ARTES'])) {
+    $campoArtes = asignarCampoFormativo('ARTES'); // Esto debe dar LENGUAJES
+    if (!isset($materiasPrincipales[$campoArtes])) {
+        $materiasPrincipales[$campoArtes] = [];
+    }
+    
+    // Calcular promedios de ARTES para cada período y trimestre
+    $calificacionesArtes = [];
+    for ($p = 1; $p <= 6; $p++) {
+        $calificacionesArtes[$p] = calcularPromedioSubmaterias($submaterias['ARTES'], $p);
+    }
+    
+    $trimestresArtes = [];
+    for ($t = 1; $t <= 3; $t++) {
+        // Para trimestres, promediar los períodos que corresponden a cada trimestre
+        if ($t == 1) $periodos = [1, 2];
+        elseif ($t == 2) $periodos = [3, 4];
+        else $periodos = [5, 6];
+        
+        $suma = 0;
+        $count = 0;
+        foreach ($periodos as $p) {
+            if ($calificacionesArtes[$p] !== null) {
+                $suma += $calificacionesArtes[$p];
+                $count++;
+            }
+        }
+        $trimestresArtes[$t] = $count > 0 ? round($suma / $count, 1) : null;
+    }
+    
+    $materiasPrincipales[$campoArtes][] = [
+        'materia_nombre' => 'Artes',
+        'calificaciones' => $calificacionesArtes,
+        'trimestres' => $trimestresArtes,
+        'es_promedio' => true,
+        'submaterias' => $submaterias['ARTES']
+    ];
+}
+
+$porCampo = $materiasPrincipales;
+
+// ORDEN ESPECÍFICO DE CAMPOS FORMATIVOS
+$ordenCampos = [
+    'SABERES Y PENSAMIENTO CIENTÍFICO',
+    'LENGUAJES',
+    'ÉTICA, NATURALEZA Y SOCIEDADES',
+    'DE LO HUMANO Y LO COMUNITARIO',
+    'EDUCACIÓN FÍSICA',
+    'OTROS CAMPOS FORMATIVOS'
+];
+
+$porCampoFinal = [];
+foreach ($ordenCampos as $campo) {
+    if (isset($porCampo[$campo])) {
+        $porCampoFinal[$campo] = $porCampo[$campo];
+    }
+}
+foreach ($porCampo as $campo => $materias) {
+    if (!isset($porCampoFinal[$campo])) {
+        $porCampoFinal[$campo] = $materias;
+    }
+}
+$porCampo = $porCampoFinal;
 
 $pageTitle = 'Boleta — ' . ($alumno['nombre'] ?? '');
 $backLink  = 'mis_hijos.php';
@@ -64,14 +233,13 @@ include __DIR__ . '/../includes/header.php';
     <p class="empty-state">No se encontró información del alumno.</p>
   <?php else: ?>
 
-  <!-- Encabezado de la boleta -->
   <div class="card" style="margin-bottom:1.5rem;">
     <div style="display:flex; justify-content:space-between; align-items:start; flex-wrap:wrap; gap:1rem;">
       <div>
         <h2 style="color:var(--color-primary); font-size:1.2rem; margin-bottom:.3rem;">
           <?= htmlspecialchars($alumno['nombre'] . ' ' . $alumno['apellido_paterno'] . ' ' . ($alumno['apellido_materno'] ?? '')) ?>
         </h2>
-        <p style="font-size:.85rem; color:var(--color-muted);">
+        <p class="form-hint">
           Matrícula: <strong><?= htmlspecialchars($alumno['matricula'] ?? '—') ?></strong>
           &nbsp;|&nbsp;
           <?= ucfirst($alumno['seccion']) ?> — <?= $alumno['grado'] ?>° <?= $alumno['grupo'] ?>
@@ -79,35 +247,25 @@ include __DIR__ . '/../includes/header.php';
           Ciclo: <strong><?= htmlspecialchars($cicloActivo['nombre']) ?></strong>
         </p>
       </div>
-      <div style="display:flex; gap:.6rem;">
+      <div>
         <a class="btn btn--sm btn--accent"
            href="boleta_pdf.php?alumno_id=<?= $alumnoId ?>&tipo=espanol"
            target="_blank">
-          ⬇ PDF Español
+          ⬇ PDF Boleta
         </a>
-        <?php if ($boletaIngles): ?>
-          <a class="btn btn--sm btn--success"
-             href="boleta_pdf.php?alumno_id=<?= $alumnoId ?>&tipo=ingles"
-             target="_blank">
-            ⬇ PDF Inglés
-          </a>
-        <?php endif; ?>
       </div>
     </div>
   </div>
 
-  <!-- ── BOLETA ESPAÑOL ─────────────────────────────────────── -->
-  <section class="card" style="margin-bottom:1.5rem;">
-    <h3 style="color:var(--color-primary); margin-bottom:1rem; font-size:1rem;">
-      📋 Boleta — Español
-    </h3>
+  <section class="card">
+    <h3 class="section-title" style="margin-bottom:1rem;">📋 Boletín de Calificaciones</h3>
 
     <div style="overflow-x:auto;">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Campo formativo</th>
-            <th>Materia</th>
+            <th style="text-align:left; width:25%;">CAMPO FORMATIVO</th>
+            <th style="text-align:left; width:25%;">MATERIA / ASIGNATURA</th>
             <?php for ($p = 1; $p <= 6; $p++): ?>
               <th style="text-align:center; min-width:50px;">P<?= $p ?></th>
             <?php endfor; ?>
@@ -119,32 +277,38 @@ include __DIR__ . '/../includes/header.php';
         <tbody>
           <?php foreach ($porCampo as $campo => $materias): ?>
             <?php foreach ($materias as $i => $m): ?>
-              <?php if ((int)$m['es_ingles']) continue; // Inglés va en su propia boleta ?>
               <tr>
                 <?php if ($i === 0): ?>
-                  <td rowspan="<?= count(array_filter($materias, fn($x) => !(int)$x['es_ingles'])) ?>"
-                      style="font-weight:600; color:var(--color-primary); font-size:.82rem; vertical-align:top;">
-                    <?= htmlspecialchars($campo) ?>
+                  <td rowspan="<?= count($materias) ?>"
+                      style="font-weight:700; background:#f0f9ff; color:#0369a1; vertical-align:middle; border-right:2px solid #e2e8f0;">
+                    <strong><?= htmlspecialchars($campo) ?></strong>
                   </td>
                 <?php endif; ?>
-                <td style="font-size:.85rem;">
+                <td style="font-size:.85rem; font-weight:500; padding:10px 8px;">
                   <?= htmlspecialchars($m['materia_nombre']) ?>
-                  <?php if (!empty($m['subcomponente'])): ?>
-                    <span style="font-size:.75rem; color:var(--color-muted);">(<?= htmlspecialchars($m['subcomponente']) ?>)</span>
+                  <?php if (isset($m['es_promedio']) && $m['es_promedio'] === true): ?>
+                    <span style="background:#dbeafe; color:#1e40af; font-size:0.65rem; padding:2px 6px; border-radius:12px; margin-left:6px;">
+                      Promedio de Artes
+                    </span>
+                    <br>
+                    <small style="font-size:0.7rem; color:#6c757d;">
+                      (<?= implode(', ', array_map(function($sub) { return $sub['materia_nombre']; }, $m['submaterias'])) ?>)
+                    </small>
+                  <?php endif; ?>
+                  <?php if ($m['materia_nombre'] === 'Inglés'): ?>
+                    <span class="badge">Inglés</span>
                   <?php endif; ?>
                 </td>
                 <?php for ($p = 1; $p <= 6; $p++): ?>
                   <?php $cal = $m['calificaciones'][$p] ?? null; ?>
-                  <td style="text-align:center; font-size:.85rem;
-                             <?= ($cal !== null && $cal < 6) ? 'color:#991b1b; font-weight:600;' : '' ?>">
-                    <?= $cal ?? (in_array($p, $periodosAbiertos) ? '—' : '') ?>
+                  <td style="text-align:center; font-size:.85rem; padding:8px 4px; <?= ($cal !== null && $cal < 6) ? 'color:#dc2626; font-weight:700;' : '' ?>">
+                    <?= $cal !== null ? $cal : (in_array($p, $periodosAbiertos) ? '—' : '') ?>
                   </td>
                 <?php endfor; ?>
                 <?php for ($t = 1; $t <= 3; $t++): ?>
                   <?php $prom = $m['trimestres'][$t] ?? null; ?>
-                  <td style="text-align:center; font-size:.85rem; font-weight:600; background:#f8fafc;
-                             <?= ($prom !== null && $prom < 6) ? 'color:#991b1b;' : 'color:var(--color-primary);' ?>">
-                    <?= $prom ?? '—' ?>
+                  <td style="text-align:center; font-size:.85rem; font-weight:700; background:#f8fafc; padding:8px 4px; <?= ($prom !== null && $prom < 6) ? 'color:#dc2626;' : 'color:#0369a1;' ?>">
+                    <?= $prom !== null ? $prom : '—' ?>
                   </td>
                 <?php endfor; ?>
               </tr>
@@ -153,53 +317,13 @@ include __DIR__ . '/../includes/header.php';
         </tbody>
       </table>
     </div>
+    
+    <?php if (!empty($periodosAbiertos)): ?>
+    <p style="font-size:0.75rem; color:#6c757d; margin-top:1rem; font-style:italic;">
+      * Los periodos abiertos están marcados con "—"
+    </p>
+    <?php endif; ?>
   </section>
-
-  <!-- ── BOLETA INGLÉS ──────────────────────────────────────── -->
-  <?php if ($boletaIngles && !empty($boletaIngles['aspectos'])): ?>
-  <section class="card">
-    <h3 style="color:var(--color-primary); margin-bottom:1rem; font-size:1rem;">
-      🌐 Boleta — Inglés
-    </h3>
-
-    <div style="overflow-x:auto;">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Habilidad</th>
-            <?php for ($p = 1; $p <= 6; $p++): ?>
-              <th style="text-align:center; min-width:50px;">P<?= $p ?></th>
-            <?php endfor; ?>
-            <th style="text-align:center;">T1</th>
-            <th style="text-align:center;">T2</th>
-            <th style="text-align:center;">T3</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($boletaIngles['aspectos'] as $asp): ?>
-            <tr>
-              <td style="font-size:.85rem;"><?= htmlspecialchars($asp['nombre']) ?></td>
-              <?php for ($p = 1; $p <= 6; $p++): ?>
-                <?php $cal = $asp['calificaciones'][$p] ?? null; ?>
-                <td style="text-align:center; font-size:.85rem;
-                           <?= ($cal !== null && $cal < 6) ? 'color:#991b1b; font-weight:600;' : '' ?>">
-                  <?= $cal ?? (in_array($p, $boletaIngles['periodosAbiertos']) ? '—' : '') ?>
-                </td>
-              <?php endfor; ?>
-              <?php for ($t = 1; $t <= 3; $t++): ?>
-                <?php $prom = $asp['trimestres'][$t] ?? null; ?>
-                <td style="text-align:center; font-size:.85rem; font-weight:600; background:#f8fafc;
-                           <?= ($prom !== null && $prom < 6) ? 'color:#991b1b;' : 'color:var(--color-primary);' ?>">
-                  <?= $prom ?? '—' ?>
-                </td>
-              <?php endfor; ?>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-  </section>
-  <?php endif; ?>
 
   <?php endif; ?>
 </main>

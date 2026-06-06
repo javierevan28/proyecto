@@ -21,12 +21,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar'])) {
     $ordenes = $_POST['orden'] ?? [];
     $camposFormativos = $_POST['campo_formativo'] ?? [];
     
-    // Eliminar asignaciones existentes de este grado
+    // ============================================================
+    // 1. Obtener materias que estaban asignadas ANTES
+    // ============================================================
+    $stmtOld = $db->prepare("SELECT materia_id FROM grados_materias WHERE seccion = ? AND grado = ?");
+    $stmtOld->bind_param('si', $seccion, $grado);
+    $stmtOld->execute();
+    $materiasViejas = $stmtOld->get_result()->fetch_all(MYSQLI_ASSOC);
+    $materiasViejasIds = array_column($materiasViejas, 'materia_id');
+    
+    // ============================================================
+    // 2. Materias que fueron DESMARCADAS (ya no están seleccionadas)
+    // ============================================================
+    $materiasEliminadas = array_diff($materiasViejasIds, $materiasSeleccionadas);
+    
+    // ============================================================
+    // 3. SI SE DESMARCA UNA MATERIA, ELIMINAR TODAS SUS ASIGNACIONES DE GRUPOS
+    // ============================================================
+    if (!empty($materiasEliminadas)) {
+        $placeholders = implode(',', array_fill(0, count($materiasEliminadas), '?'));
+        
+        // Eliminar asignacion_maestros
+        $sql1 = "DELETE FROM asignacion_maestros WHERE asignacion_id IN (
+            SELECT id FROM asignaciones 
+            WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+        )";
+        $stmt1 = $db->prepare($sql1);
+        $types = 'si' . str_repeat('i', count($materiasEliminadas));
+        $params = array_merge([$seccion, $grado], $materiasEliminadas);
+        $stmt1->bind_param($types, ...$params);
+        $stmt1->execute();
+        
+        // Eliminar asignacion_artes
+        $sql2 = "DELETE FROM asignacion_artes WHERE asignacion_id IN (
+            SELECT id FROM asignaciones 
+            WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+        )";
+        $stmt2 = $db->prepare($sql2);
+        $stmt2->bind_param($types, ...$params);
+        $stmt2->execute();
+        
+        // Eliminar asignacion_ingles_aspectos
+        $sql3 = "DELETE FROM asignacion_ingles_aspectos WHERE asignacion_id IN (
+            SELECT id FROM asignaciones 
+            WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+        )";
+        $stmt3 = $db->prepare($sql3);
+        $stmt3->bind_param($types, ...$params);
+        $stmt3->execute();
+        
+        // Eliminar asignaciones
+        $sql4 = "DELETE FROM asignaciones WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)";
+        $stmt4 = $db->prepare($sql4);
+        $stmt4->bind_param($types, ...$params);
+        $stmt4->execute();
+    }
+    
+    // ============================================================
+    // 4. Eliminar asignaciones existentes de este grado en grados_materias
+    // ============================================================
     $stmtDel = $db->prepare("DELETE FROM grados_materias WHERE seccion = ? AND grado = ?");
     $stmtDel->bind_param('si', $seccion, $grado);
     $stmtDel->execute();
     
-    // Insertar nuevas
+    // ============================================================
+    // 5. Insertar nuevas materias seleccionadas
+    // ============================================================
     foreach ($materiasSeleccionadas as $materiaId) {
         $orden = isset($ordenes[$materiaId]) ? (int)$ordenes[$materiaId] : 0;
         $campoId = isset($camposFormativos[$materiaId]) && !empty($camposFormativos[$materiaId]) 
@@ -39,6 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar'])) {
     }
     
     $mensaje = "Materias asignadas correctamente al grado.";
+    if (!empty($materiasEliminadas)) {
+        $mensaje .= " Se eliminaron " . count($materiasEliminadas) . " materia(s) y sus asignaciones de grupos.";
+    }
 }
 
 // Obtener datos para la vista
@@ -49,7 +112,7 @@ $grados = [1, 2, 3, 4, 5, 6];
 $todasMaterias = $materiaModelo->listarActivas();
 $camposDisponibles = $campoModelo->listarActivos();
 
-// Separar materias por tipo (SIN FILTRAR DUPLICADOS)
+// Separar materias por tipo
 $materiasBase = [];
 $materiasIngles = [];
 $materiasArtes = [];
@@ -209,27 +272,23 @@ include __DIR__ . '/../includes/header.php';
     .btn {
         margin-top: 1rem;
     }
-    /* ── Fix tabla resumen ─── */
-.data-table thead th {
-    text-align: left;
-}
-
-.data-table tbody td {
-    text-align: left;
-    vertical-align: middle;
-}
-
-.data-table tbody td:first-child {
-    text-align: center;
-    font-weight: 700;
-    background: var(--color-primary);
-    color: #fff;
-    width: 80px;
-}
-
-.data-table tbody tr:last-child td:first-child {
-    border-bottom-left-radius: var(--radius-sm);
-}
+    .data-table thead th {
+        text-align: left;
+    }
+    .data-table tbody td {
+        text-align: left;
+        vertical-align: middle;
+    }
+    .data-table tbody td:first-child {
+        text-align: center;
+        font-weight: 700;
+        background: var(--color-primary);
+        color: #fff;
+        width: 80px;
+    }
+    .data-table tbody tr:last-child td:first-child {
+        border-bottom-left-radius: var(--radius-sm);
+    }
 </style>
 
 <main class="container">
@@ -320,7 +379,7 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
-            <!-- Pestaña Inglés - SOLO 5 MATERIAS -->
+            <!-- Pestaña Inglés -->
             <div id="tab-ingles" class="tab-pane <?= $tabActual === 'ingles' ? 'active' : '' ?>">
                 <div class="select-all">
                     <input type="checkbox" id="select-all-ingles" onchange="toggleAll('ingles', this.checked)">
@@ -339,7 +398,6 @@ include __DIR__ . '/../includes/header.php';
                                 break;
                             }
                         }
-                        // Formatear el nombre para mostrar: Ej: "1° - Speaking" o "1 Sec - Speaking"
                         $gradoTexto = '';
                         if ($seccionActual === 'secundaria') {
                             $gradoTexto = $gradoActual . ' Sec';
@@ -517,19 +575,13 @@ include __DIR__ . '/../includes/header.php';
                     <?php foreach ($materiasAsignadas as $ma): ?>
                         <?php
                         $tipoMateria = '';
-                        if ((int)$ma['es_ingles']) {
-                            $tipoMateria = '<span class="badge">Inglés</span>';
-                            $gradoTexto = '';
-                            if ($seccionActual === 'secundaria') {
-                                $gradoTexto = $gradoActual . ' Sec';
-                            } else {
-                                $gradoTexto = $gradoActual . '°';
-                            }
-                            $nombreMostrar = $gradoTexto . ' - ' . $ma['nombre'];
-                        } else {
-                            $tipoMateria = '<span class="badge">Base</span>';
-                            $nombreMostrar = $ma['nombre'];
-                        }
+                      if ((int)$ma['es_ingles']) {
+    $tipoMateria = '<span class="badge">Inglés</span>';
+    $nombreMostrar = $ma['nombre'];
+} else {
+    $tipoMateria = '<span class="badge">Base</span>';
+    $nombreMostrar = $ma['nombre'];
+}
                         ?>
                         <tr>
                             <td><?= $ma['orden'] ?></td>
@@ -552,18 +604,14 @@ function toggleAll(tab, checked) {
     });
 }
 
-// Pestañas
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
         const tabId = this.dataset.tab;
-        
         const url = new URL(window.location.href);
         url.searchParams.set('tab', tabId);
         window.history.pushState({}, '', url);
-        
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
-        
         document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
         document.getElementById(`tab-${tabId}`).classList.add('active');
     });

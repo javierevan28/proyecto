@@ -40,7 +40,8 @@ include __DIR__ . '/../includes/header.php';
         <p class="alert alert--success" role="status">
           ✅ <strong>Alumno registrado correctamente.</strong><br>
           Usuario: <strong><?= htmlspecialchars($resultado['username']) ?></strong>
-          &nbsp;(contraseña igual al usuario)
+          &nbsp;(contraseña igual al usuario)<br>
+          Matrícula: <strong><?= htmlspecialchars($resultado['matricula']) ?></strong>
         </p>
       <?php else: ?>
         <p class="alert alert--error" role="alert">
@@ -58,6 +59,7 @@ include __DIR__ . '/../includes/header.php';
       <form method="POST" novalidate>
         <div class="form-grid">
 
+          <!-- Datos personales -->
           <div class="form-group">
             <label for="apellido_paterno">Apellido paterno *</label>
             <input type="text" id="apellido_paterno" name="apellido_paterno"
@@ -80,10 +82,13 @@ include __DIR__ . '/../includes/header.php';
           </div>
 
           <div class="form-group">
-            <label for="curp">CURP</label>
-            <input type="text" id="curp" name="curp"
-                   value="<?= htmlspecialchars($_POST['curp'] ?? '') ?>"
-                   maxlength="18">
+            <label for="genero">Género *</label>
+            <select id="genero" name="genero" required>
+              <option value="">Selecciona…</option>
+              <?php foreach (['masculino' => 'Masculino', 'femenino' => 'Femenino', 'otro' => 'Otro'] as $val => $lbl): ?>
+                <option value="<?= $val ?>" <?= (($_POST['genero'] ?? '') === $val) ? 'selected' : '' ?>><?= $lbl ?></option>
+              <?php endforeach; ?>
+            </select>
           </div>
 
           <div class="form-group">
@@ -94,15 +99,37 @@ include __DIR__ . '/../includes/header.php';
           </div>
 
           <div class="form-group">
-            <label for="genero">Género *</label>
-            <select id="genero" name="genero" required>
-              <option value="">Selecciona…</option>
-              <?php foreach (['masculino' => 'Masculino', 'femenino' => 'Femenino', 'otro' => 'Otro'] as $val => $lbl): ?>
-                <option value="<?= $val ?>" <?= (($_POST['genero'] ?? '') === $val) ? 'selected' : '' ?>><?= $lbl ?></option>
-              <?php endforeach; ?>
-            </select>
+            <label for="fecha_ingreso">Fecha de ingreso *</label>
+            <input type="date" id="fecha_ingreso" name="fecha_ingreso"
+                   value="<?= htmlspecialchars($_POST['fecha_ingreso'] ?? date('Y-m-d')) ?>"
+                   required>
           </div>
 
+          <div class="form-group">
+            <label for="curp">CURP</label>
+            <input type="text" id="curp" name="curp"
+                   value="<?= htmlspecialchars($_POST['curp'] ?? '') ?>"
+                   maxlength="18">
+          </div>
+
+          <!-- Becas - solo número, sin símbolos -->
+          <div class="form-group">
+            <label for="beca_interna">Beca interna</label>
+            <input type="number" id="beca_interna" name="beca_interna"
+                   step="0.01" min="0"
+                   value="<?= htmlspecialchars($_POST['beca_interna'] ?? '0') ?>"
+                   placeholder="0.00">
+          </div>
+
+          <div class="form-group">
+            <label for="beca_externa">Beca externa</label>
+            <input type="number" id="beca_externa" name="beca_externa"
+                   step="0.01" min="0"
+                   value="<?= htmlspecialchars($_POST['beca_externa'] ?? '0') ?>"
+                   placeholder="0.00">
+          </div>
+
+          <!-- Estatus escolar -->
           <div class="form-group">
             <label for="estatus">Estatus *</label>
             <select id="estatus" name="estatus" required>
@@ -114,6 +141,7 @@ include __DIR__ . '/../includes/header.php';
             </select>
           </div>
 
+          <!-- Ubicación escolar -->
           <div class="form-group">
             <label for="seccion">Sección *</label>
             <select id="seccion" name="seccion" required>
@@ -144,6 +172,7 @@ include __DIR__ . '/../includes/header.php';
             </select>
           </div>
 
+          <!-- Padre/Tutor -->
           <div class="form-group full">
             <label for="padre_id">Padre / tutor *</label>
             <select id="padre_id" name="padre_id" required>

@@ -9,13 +9,8 @@ class BoletaModel {
         $this->db = $db;
     }
 
-    // ----------------------------------------------------------
-    // Obtiene todos los datos de la boleta de un alumno
-    // en el ciclo activo
-    // ----------------------------------------------------------
     public function obtenerBoleta(int $alumnoId, int $cicloId): array {
 
-        // Datos del alumno
         $stmtAl = $this->db->prepare("
             SELECT al.nombre, al.apellido_paterno, al.apellido_materno,
                    al.matricula, al.grado, al.grupo, al.seccion
@@ -27,7 +22,6 @@ class BoletaModel {
         $alumno = $stmtAl->get_result()->fetch_assoc();
         if (!$alumno) return [];
 
-        // Periodos que han sido abiertos en este ciclo
         $stmtP = $this->db->prepare("
             SELECT periodo FROM periodos_apertura
             WHERE ciclo_id = ?
@@ -35,236 +29,194 @@ class BoletaModel {
         ");
         $stmtP->bind_param('i', $cicloId);
         $stmtP->execute();
-        $resP    = $stmtP->get_result();
+        $resP = $stmtP->get_result();
         $periodosAbiertos = [];
         while ($row = $resP->fetch_assoc()) {
             $periodosAbiertos[] = (int)$row['periodo'];
         }
 
-        // Asignaciones del grupo del alumno en este ciclo
         $stmtAsig = $this->db->prepare("
             SELECT a.id AS asignacion_id, a.orden,
                    m.nombre AS materia_nombre,
                    m.es_ingles, m.es_artes, m.es_higiene,
-                   cf.nombre AS campo_formativo_nombre,
-                   cf.orden  AS campo_orden
+                   cf.id AS campo_id, cf.nombre AS campo_nombre, cf.orden AS campo_orden
             FROM asignaciones a
-            JOIN materias           m  ON m.id  = a.materia_id
+            JOIN materias m ON m.id = a.materia_id
             LEFT JOIN campos_formativos cf ON cf.id = a.campo_formativo_id
-            WHERE a.ciclo_id = ?
-              AND a.seccion  = ?
-              AND a.grado    = ?
-              AND a.grupo    = ?
-              AND a.activo   = 1
+            WHERE a.ciclo_id = ? AND a.seccion = ? AND a.grado = ? AND a.grupo = ? AND a.activo = 1
             ORDER BY cf.orden ASC, a.orden ASC
         ");
-        $stmtAsig->bind_param(
-            'isis',
-            $cicloId,
-            $alumno['seccion'],
-            $alumno['grado'],
-            $alumno['grupo']
-        );
+        $stmtAsig->bind_param('isis', $cicloId, $alumno['seccion'], $alumno['grado'], $alumno['grupo']);
         $stmtAsig->execute();
         $asignaciones = $stmtAsig->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        // Para cada asignación obtener calificaciones por periodo
-        $materias = [];
+        $materiasBase = [];
+        $materiasIngles = [];
+        $materiasArtes = [];
+
         foreach ($asignaciones as $asig) {
-            $asigId   = (int)$asig['asignacion_id'];
-            $esIngles = (int)$asig['es_ingles'];
-            $esArtes  = (int)$asig['es_artes'];
-
-            $calsPorPeriodo = [];
-
-            if ($esIngles) {
-                // Obtener aspectos
-                $stmtAsp = $this->db->prepare("
-                    SELECT id, nombre, orden
-                    FROM asignacion_ingles_aspectos
-                    WHERE asignacion_id = ? AND activo = 1
-                    ORDER BY orden ASC
-                ");
-                $stmtAsp->bind_param('i', $asigId);
-                $stmtAsp->execute();
-                $aspectos = $stmtAsp->get_result()->fetch_all(MYSQLI_ASSOC);
-
-                // Por cada periodo obtener promedio de aspectos
-                for ($p = 1; $p <= 6; $p++) {
-                    if (!in_array($p, $periodosAbiertos)) {
-                        $calsPorPeriodo[$p] = null;
-                        continue;
-                    }
-                    $suma  = 0;
-                    $count = 0;
-                    foreach ($aspectos as $asp) {
-                        $stmtC = $this->db->prepare("
-                            SELECT calificacion FROM calificaciones_ingles
-                            WHERE alumno_id = ? AND aspecto_id = ? AND periodo = ?
-                            LIMIT 1
-                        ");
-                        $stmtC->bind_param('iii', $alumnoId, $asp['id'], $p);
-                        $stmtC->execute();
-                        $resC = $stmtC->get_result()->fetch_assoc();
-                        if ($resC && $resC['calificacion'] !== null) {
-                            $suma += $resC['calificacion'];
-                            $count++;
-                        }
-                    }
-                    $calsPorPeriodo[$p] = $count > 0 ? round($suma / $count, 1) : null;
-                }
-                $asig['aspectos'] = $aspectos;
-
-            } elseif ($esArtes) {
-                // Obtener subcomponente asignado
-                $stmtSub = $this->db->prepare("
-                    SELECT s.nombre
-                    FROM asignacion_artes aa
-                    JOIN artes_subcomponentes s ON s.id = aa.subcomponente_id
-                    WHERE aa.asignacion_id = ? LIMIT 1
-                ");
-                $stmtSub->bind_param('i', $asigId);
-                $stmtSub->execute();
-                $sub = $stmtSub->get_result()->fetch_assoc();
-                $asig['subcomponente'] = $sub['nombre'] ?? '';
-
-                // Calificaciones normales por periodo
-                for ($p = 1; $p <= 6; $p++) {
-                    if (!in_array($p, $periodosAbiertos)) {
-                        $calsPorPeriodo[$p] = null;
-                        continue;
-                    }
-                    $stmtC = $this->db->prepare("
-                        SELECT calificacion FROM calificaciones
-                        WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ?
-                        LIMIT 1
-                    ");
-                    $stmtC->bind_param('iii', $alumnoId, $asigId, $p);
-                    $stmtC->execute();
-                    $resC = $stmtC->get_result()->fetch_assoc();
-                    $calsPorPeriodo[$p] = $resC ? $resC['calificacion'] : null;
-                }
-
+            if ((int)$asig['es_ingles'] === 1) {
+                $materiasIngles[] = $asig;
+            } elseif ((int)$asig['es_artes'] === 1) {
+                $materiasArtes[] = $asig;
             } else {
-                // Materia normal
-                for ($p = 1; $p <= 6; $p++) {
-                    if (!in_array($p, $periodosAbiertos)) {
-                        $calsPorPeriodo[$p] = null;
-                        continue;
-                    }
-                    $stmtC = $this->db->prepare("
-                        SELECT calificacion FROM calificaciones
-                        WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ?
-                        LIMIT 1
-                    ");
-                    $stmtC->bind_param('iii', $alumnoId, $asigId, $p);
-                    $stmtC->execute();
-                    $resC = $stmtC->get_result()->fetch_assoc();
-                    $calsPorPeriodo[$p] = $resC ? $resC['calificacion'] : null;
-                }
+                $materiasBase[] = $asig;
             }
-
-            // Calcular promedios por trimestre
-            $trim = [];
-            for ($t = 1; $t <= 3; $t++) {
-                $p1 = $calsPorPeriodo[$t * 2 - 1];
-                $p2 = $calsPorPeriodo[$t * 2];
-                if ($p1 !== null && $p2 !== null) {
-                    $trim[$t] = round(($p1 + $p2) / 2, 1);
-                } elseif ($p1 !== null) {
-                    $trim[$t] = $p1;
-                } elseif ($p2 !== null) {
-                    $trim[$t] = $p2;
-                } else {
-                    $trim[$t] = null;
-                }
-            }
-
-            $asig['calificaciones'] = $calsPorPeriodo;
-            $asig['trimestres']     = $trim;
-            $materias[]             = $asig;
         }
 
-        // Agrupar por campo formativo
+        $materiasConCals = [];
+        foreach ($materiasBase as $asig) {
+            $asigId = (int)$asig['asignacion_id'];
+            $cals = [];
+            for ($p = 1; $p <= 6; $p++) {
+                $cals[$p] = $this->obtenerCalificacionMateria($alumnoId, $asigId, $p);
+            }
+            $trims = [];
+            for ($t = 1; $t <= 3; $t++) {
+                $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
+            }
+            $asig['calificaciones'] = $cals;
+            $asig['trimestres'] = $trims;
+            $materiasConCals[] = $asig;
+        }
+
+        // Materias de inglés con sus calificaciones individuales
+        $materiasInglesConCals = [];
+        foreach ($materiasIngles as $asig) {
+            $asigId = (int)$asig['asignacion_id'];
+            $cals = [];
+            for ($p = 1; $p <= 6; $p++) {
+                $cals[$p] = $this->obtenerCalificacionMateria($alumnoId, $asigId, $p);
+            }
+            $trims = [];
+            for ($t = 1; $t <= 3; $t++) {
+                $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
+            }
+            $asig['calificaciones'] = $cals;
+            $asig['trimestres'] = $trims;
+            $materiasInglesConCals[] = $asig;
+        }
+
+        // Calcular promedio de INGLÉS
+        $promedioIngles = [];
+        if (!empty($materiasIngles)) {
+            for ($p = 1; $p <= 6; $p++) {
+                $suma = 0;
+                $count = 0;
+                foreach ($materiasIngles as $asig) {
+                    $cal = $this->obtenerCalificacionMateria($alumnoId, (int)$asig['asignacion_id'], $p);
+                    if ($cal !== null) {
+                        $suma += $cal;
+                        $count++;
+                    }
+                }
+                $promedioIngles[$p] = $count > 0 ? round($suma / $count) : null;
+            }
+        }
+
+        // Promedio de ARTES
+        $promedioArtes = [];
+        if (!empty($materiasArtes)) {
+            for ($p = 1; $p <= 6; $p++) {
+                $suma = 0;
+                $count = 0;
+                foreach ($materiasArtes as $asig) {
+                    $cal = $this->obtenerCalificacionMateria($alumnoId, (int)$asig['asignacion_id'], $p);
+                    if ($cal !== null) {
+                        $suma += $cal;
+                        $count++;
+                    }
+                }
+                $promedioArtes[$p] = $count > 0 ? round($suma / $count) : null;
+            }
+        }
+
         $porCampo = [];
-        foreach ($materias as $mat) {
-            $campo = $mat['campo_formativo_nombre'] ?? 'Sin campo formativo';
-            $porCampo[$campo][] = $mat;
+
+        foreach ($materiasConCals as $asig) {
+            $campo = $asig['campo_nombre'] ?? 'Sin campo formativo';
+            if (!isset($porCampo[$campo])) {
+                $porCampo[$campo] = [];
+            }
+            $porCampo[$campo][] = $asig;
+        }
+
+        if (!empty($materiasIngles)) {
+            $trimIngles = [];
+            for ($t = 1; $t <= 3; $t++) {
+                $trimIngles[$t] = $this->calcTrimestre($promedioIngles[$t*2-1], $promedioIngles[$t*2]);
+            }
+            $materiaIngles = [
+                'asignacion_id' => 0,
+                'materia_nombre' => 'Inglés',
+                'es_ingles' => 0,
+                'es_artes' => 0,
+                'calificaciones' => $promedioIngles,
+                'trimestres' => $trimIngles,
+                'subcomponente' => ''
+            ];
+            $campoLenguajes = 'LENGUAJES';
+            if (!isset($porCampo[$campoLenguajes])) {
+                $porCampo[$campoLenguajes] = [];
+            }
+            $porCampo[$campoLenguajes][] = $materiaIngles;
+        }
+
+        if (!empty($materiasArtes)) {
+            $trimArtes = [];
+            for ($t = 1; $t <= 3; $t++) {
+                $trimArtes[$t] = $this->calcTrimestre($promedioArtes[$t*2-1], $promedioArtes[$t*2]);
+            }
+            $materiaArtes = [
+                'asignacion_id' => 0,
+                'materia_nombre' => 'Artes',
+                'es_ingles' => 0,
+                'es_artes' => 0,
+                'calificaciones' => $promedioArtes,
+                'trimestres' => $trimArtes,
+                'subcomponente' => ''
+            ];
+            $campoArtes = 'DE LO HUMANO Y LO COMUNITARIO';
+            if (!isset($porCampo[$campoArtes])) {
+                $porCampo[$campoArtes] = [];
+            }
+            $porCampo[$campoArtes][] = $materiaArtes;
         }
 
         return [
-            'alumno'           => $alumno,
-            'ciclo_id'         => $cicloId,
+            'alumno' => $alumno,
+            'ciclo_id' => $cicloId,
             'periodosAbiertos' => $periodosAbiertos,
-            'porCampo'         => $porCampo,
-            'materias'         => $materias,
+            'porCampo' => $porCampo,
+            'materias' => $materiasConCals,
+            'materiasIngles' => $materiasInglesConCals, // Para la boleta de inglés
         ];
     }
 
-    // ----------------------------------------------------------
-    // Obtiene aspectos de inglés con calificaciones por periodo
-    // para la boleta de inglés
-    // ----------------------------------------------------------
-    public function obtenerBoletaIngles(int $alumnoId, int $cicloId, int $asignacionId): array {
-        // Periodos abiertos
-        $stmtP = $this->db->prepare("
-            SELECT periodo FROM periodos_apertura
-            WHERE ciclo_id = ? ORDER BY periodo ASC
+    private function obtenerCalificacionMateria(int $alumnoId, int $asignacionId, int $periodo): ?float {
+        $stmt = $this->db->prepare("
+            SELECT SUM(c.calificacion * ap.porcentaje) / SUM(ap.porcentaje) as promedio
+            FROM calificaciones c
+            JOIN asignacion_aspectos ap ON ap.id = c.aspecto_id
+            WHERE c.alumno_id = ? AND c.asignacion_id = ? AND c.periodo = ?
         ");
-        $stmtP->bind_param('i', $cicloId);
-        $stmtP->execute();
-        $periodosAbiertos = array_column(
-            $stmtP->get_result()->fetch_all(MYSQLI_ASSOC), 'periodo'
-        );
-
-        // Aspectos
-        $stmtAsp = $this->db->prepare("
-            SELECT id, nombre, orden
-            FROM asignacion_ingles_aspectos
-            WHERE asignacion_id = ? AND activo = 1
-            ORDER BY orden ASC
-        ");
-        $stmtAsp->bind_param('i', $asignacionId);
-        $stmtAsp->execute();
-        $aspectos = $stmtAsp->get_result()->fetch_all(MYSQLI_ASSOC);
-
-        // Calificaciones por aspecto y periodo
-        foreach ($aspectos as &$asp) {
-            $calsPorPeriodo = [];
-            for ($p = 1; $p <= 6; $p++) {
-                if (!in_array($p, $periodosAbiertos)) {
-                    $calsPorPeriodo[$p] = null;
-                    continue;
-                }
-                $stmtC = $this->db->prepare("
-                    SELECT calificacion FROM calificaciones_ingles
-                    WHERE alumno_id = ? AND aspecto_id = ? AND periodo = ?
-                    LIMIT 1
-                ");
-                $stmtC->bind_param('iii', $alumnoId, $asp['id'], $p);
-                $stmtC->execute();
-                $resC = $stmtC->get_result()->fetch_assoc();
-                $calsPorPeriodo[$p] = $resC ? $resC['calificacion'] : null;
-            }
-
-            // Trimestres
-            $trim = [];
-            for ($t = 1; $t <= 3; $t++) {
-                $p1 = $calsPorPeriodo[$t * 2 - 1];
-                $p2 = $calsPorPeriodo[$t * 2];
-                if ($p1 !== null && $p2 !== null)   $trim[$t] = round(($p1 + $p2) / 2, 1);
-                elseif ($p1 !== null)                $trim[$t] = $p1;
-                elseif ($p2 !== null)                $trim[$t] = $p2;
-                else                                 $trim[$t] = null;
-            }
-
-            $asp['calificaciones'] = $calsPorPeriodo;
-            $asp['trimestres']     = $trim;
+        $stmt->bind_param('iii', $alumnoId, $asignacionId, $periodo);
+        $stmt->execute();
+        $res = $stmt->get_result()->fetch_assoc();
+        
+        if ($res && $res['promedio'] !== null) {
+            return round($res['promedio']);
         }
+        return null;
+    }
 
-        return [
-            'aspectos'         => $aspectos,
-            'periodosAbiertos' => $periodosAbiertos,
-        ];
+    private function calcTrimestre(?float $p1, ?float $p2): ?float {
+        if ($p1 !== null && $p2 !== null) {
+            return round(($p1 + $p2) / 2);
+        }
+        if ($p1 !== null) return $p1;
+        if ($p2 !== null) return $p2;
+        return null;
     }
 }
+?>

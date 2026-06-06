@@ -106,13 +106,6 @@ include __DIR__ . '/../includes/header.php';
         <p class="nav-card__desc">Asigna qué materias tiene cada grado</p>
     </a>
 
-  <a class="nav-card" href="ingles_aspectos.php">
-      <span class="nav-card__icon" aria-hidden="true">🌐</span>
-      <h3 class="nav-card__title">Aspectos de Inglés</h3>
-      <p class="nav-card__desc">Asigna qué habilidades (Listening, Grammar, etc.) tiene cada grado</p>
-  </a>
-
-
     <a class="nav-card" href="asignaciones_base.php">
       <span class="nav-card__icon" aria-hidden="true">📘</span>
       <h3 class="nav-card__title">Materias Base</h3>

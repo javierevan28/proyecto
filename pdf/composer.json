@@ -1,0 +1,12 @@
+{
+    "name": "evan-arellano/pdf",
+    "authors": [
+        {
+            "name": "javierevan28",
+            "email": "javierdeveloper13@gmail.com"
+        }
+    ],
+    "require": {
+        "dompdf/dompdf": "^3.1"
+    }
+}
