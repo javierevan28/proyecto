@@ -16,23 +16,78 @@ $periodo   = (int)($_GET['periodo']    ?? 1);
 $mensaje = '';
 $error   = '';
 
-// Procesar eliminación masiva de calificaciones
+// Detectar si la materia seleccionada es de ausencias
+$esAusencias = false;
+if ($materiaId) {
+    $stmtM = $db->prepare("SELECT es_ausencias FROM materias WHERE id = ? LIMIT 1");
+    $stmtM->bind_param('i', $materiaId);
+    $stmtM->execute();
+    $rowM = $stmtM->get_result()->fetch_assoc();
+    $esAusencias = $rowM && (int)$rowM['es_ausencias'] === 1;
+}
+
+// Obtener ciclo activo (para ausencias)
+$cicloId = 0;
+$rowCiclo = $db->query("SELECT id FROM ciclos_escolares WHERE activo = 1 LIMIT 1")->fetch_assoc();
+if ($rowCiclo) $cicloId = (int)$rowCiclo['id'];
+
+// ── POST: borrar calificaciones normales ──────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['borrar_todas'])) {
-    $asignacionId = (int)$_POST['asignacion_id'];
+    $asignacionId  = (int)$_POST['asignacion_id'];
     $periodoBorrar = (int)$_POST['periodo_borrar'];
-    
     $stmt = $db->prepare("DELETE FROM calificaciones WHERE asignacion_id = ? AND periodo = ?");
     $stmt->bind_param('ii', $asignacionId, $periodoBorrar);
-    
     if ($stmt->execute()) {
-        $eliminadas = $stmt->affected_rows;
         $mensaje = "✅ Se eliminaron calificaciones correctamente.";
     } else {
         $error = "❌ Error al eliminar las calificaciones.";
     }
 }
 
-// Materias separadas por idioma
+// ── POST: guardar ausencias ───────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_ausencias'])) {
+    $periodoPost = (int)$_POST['periodo'];
+    $stmt = $db->prepare("
+        INSERT INTO ausencias (alumno_id, ciclo_id, periodo, dias_ausencia, capturado_por)
+        VALUES (?, ?, ?, ?, 1)
+        ON DUPLICATE KEY UPDATE
+            dias_ausencia  = VALUES(dias_ausencia),
+            capturado_por  = VALUES(capturado_por),
+            actualizado_en = NOW()
+    ");
+    $errores = 0;
+    foreach ($_POST['dias'] as $alumnoId => $d) {
+        $alumnoId = (int)$alumnoId;
+        $d        = max(0, min(31, (int)$d));
+        $stmt->bind_param('iiiii', $alumnoId, $cicloId, $periodoPost, $d, $d); // capturado_por = 1 (superadmin)
+        if (!$stmt->execute()) $errores++;
+    }
+    $mensaje = $errores > 0
+        ? "⚠️ Hubo $errores error(es) al guardar ausencias."
+        : "✅ Ausencias guardadas correctamente.";
+}
+
+// ── POST: guardar calificaciones normales ─────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar'])) {
+    $asignacionId = (int)$_POST['asignacion_id'];
+    $periodo      = (int)$_POST['periodo'];
+    foreach ($_POST['calificacion'] as $alumnoId => $aspectos) {
+        foreach ($aspectos as $aspectoId => $cal) {
+            $cal = $cal === '' ? null : (float)$cal;
+            if ($cal !== null && ($cal < 0 || $cal > 10)) continue;
+            $stmt = $db->prepare("
+                INSERT INTO calificaciones (alumno_id, asignacion_id, aspecto_id, periodo, calificacion, capturado_por)
+                VALUES (?, ?, ?, ?, ?, 1)
+                ON DUPLICATE KEY UPDATE calificacion = VALUES(calificacion)
+            ");
+            $stmt->bind_param('iiiid', $alumnoId, $asignacionId, $aspectoId, $periodo, $cal);
+            $stmt->execute();
+        }
+    }
+    $mensaje = "✅ Calificaciones guardadas correctamente.";
+}
+
+// ── Materias separadas por idioma ─────────────────────────────
 $materiasEspanol = [];
 $materiasIngles  = [];
 
@@ -61,79 +116,78 @@ if ($seccion && $grado) {
 
 $materiasActuales = $idioma === 'ingles' ? $materiasIngles : $materiasEspanol;
 
-// Guardar calificaciones
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar'])) {
-    $asignacionId = (int)$_POST['asignacion_id'];
-    $periodo      = (int)$_POST['periodo'];
-    foreach ($_POST['calificacion'] as $alumnoId => $aspectos) {
-        foreach ($aspectos as $aspectoId => $cal) {
-            $cal = $cal === '' ? null : (float)$cal;
-            if ($cal !== null && ($cal < 0 || $cal > 10)) continue;
-            $stmt = $db->prepare("
-                INSERT INTO calificaciones (alumno_id, asignacion_id, aspecto_id, periodo, calificacion, capturado_por)
-                VALUES (?, ?, ?, ?, ?, 1)
-                ON DUPLICATE KEY UPDATE calificacion = VALUES(calificacion)
-            ");
-            $stmt->bind_param('iiiid', $alumnoId, $asignacionId, $aspectoId, $periodo, $cal);
-            $stmt->execute();
-        }
-    }
-    $mensaje = "✅ Calificaciones guardadas correctamente.";
-}
-
-$alumnos      = [];
-$aspectos     = [];
-$asignacionId = 0;
+// ── Datos para la tabla ───────────────────────────────────────
+$alumnos       = [];
+$aspectos      = [];
+$asignacionId  = 0;
 $nombreMateria = '';
 
 if ($materiaId && $seccion && $grado && $grupo) {
-    // Obtener nombre de la materia
     $stmt = $db->prepare("SELECT nombre FROM materias WHERE id = ?");
     $stmt->bind_param('i', $materiaId);
     $stmt->execute();
-    $rowMateria = $stmt->get_result()->fetch_assoc();
+    $rowMateria    = $stmt->get_result()->fetch_assoc();
     $nombreMateria = $rowMateria ? $rowMateria['nombre'] : '';
-    
-    $stmt = $db->prepare("
-        SELECT id FROM asignaciones
-        WHERE materia_id = ? AND seccion = ? AND grado = ? AND grupo = ? AND activo = 1
-        LIMIT 1
-    ");
-    $stmt->bind_param('isis', $materiaId, $seccion, $grado, $grupo);
-    $stmt->execute();
-    $row          = $stmt->get_result()->fetch_assoc();
-    $asignacionId = $row ? $row['id'] : 0;
 
-    if ($asignacionId) {
-        $stmt = $db->prepare("SELECT id, nombre, porcentaje FROM asignacion_aspectos WHERE asignacion_id = ? AND activo = 1 ORDER BY orden");
-        $stmt->bind_param('i', $asignacionId);
-        $stmt->execute();
-        $aspectos = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-
+    if (!$esAusencias) {
+        // Necesitamos asignacion_id solo para materias normales
         $stmt = $db->prepare("
-            SELECT al.id, al.nombre, al.apellido_paterno, al.apellido_materno
+            SELECT id FROM asignaciones
+            WHERE materia_id = ? AND seccion = ? AND grado = ? AND grupo = ? AND activo = 1
+            LIMIT 1
+        ");
+        $stmt->bind_param('isis', $materiaId, $seccion, $grado, $grupo);
+        $stmt->execute();
+        $row          = $stmt->get_result()->fetch_assoc();
+        $asignacionId = $row ? $row['id'] : 0;
+
+        if ($asignacionId) {
+            $stmt = $db->prepare("SELECT id, nombre, porcentaje FROM asignacion_aspectos WHERE asignacion_id = ? AND activo = 1 ORDER BY orden");
+            $stmt->bind_param('i', $asignacionId);
+            $stmt->execute();
+            $aspectos = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+            $stmt = $db->prepare("
+                SELECT al.id, al.nombre, al.apellido_paterno, al.apellido_materno
+                FROM alumnos al
+                WHERE al.seccion = ? AND al.grado = ? AND al.grupo = ? AND al.activo = 1
+                ORDER BY al.apellido_paterno, al.apellido_materno, al.nombre
+            ");
+            $stmt->bind_param('sis', $seccion, $grado, $grupo);
+            $stmt->execute();
+            $alumnosRaw = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+            $idsVistos = [];
+            foreach ($alumnosRaw as $al) {
+                if (in_array($al['id'], $idsVistos)) continue;
+                $idsVistos[]  = $al['id'];
+                $al['califs'] = [];
+                $stmt2 = $db->prepare("SELECT aspecto_id, calificacion FROM calificaciones WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ?");
+                $stmt2->bind_param('iii', $al['id'], $asignacionId, $periodo);
+                $stmt2->execute();
+                $res2 = $stmt2->get_result();
+                while ($r = $res2->fetch_assoc()) {
+                    $al['califs'][$r['aspecto_id']] = $r['calificacion'];
+                }
+                $alumnos[] = $al;
+            }
+        }
+    } else {
+        // AUSENCIAS: traer alumnos con días registrados
+        $stmt = $db->prepare("
+            SELECT al.id, al.nombre, al.apellido_paterno, al.apellido_materno,
+                   COALESCE(au.dias_ausencia, 0) AS dias
             FROM alumnos al
+            LEFT JOIN ausencias au
+                ON au.alumno_id = al.id
+               AND au.ciclo_id  = ?
+               AND au.periodo   = ?
             WHERE al.seccion = ? AND al.grado = ? AND al.grupo = ? AND al.activo = 1
             ORDER BY al.apellido_paterno, al.apellido_materno, al.nombre
         ");
-        $stmt->bind_param('sis', $seccion, $grado, $grupo);
+        $stmt->bind_param('iisis', $cicloId, $periodo, $seccion, $grado, $grupo);
         $stmt->execute();
-        $alumnosRaw = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-
-        $idsVistos = [];
-        foreach ($alumnosRaw as $al) {
-            if (in_array($al['id'], $idsVistos)) continue;
-            $idsVistos[]  = $al['id'];
-            $al['califs'] = [];
-            $stmt2 = $db->prepare("SELECT aspecto_id, calificacion FROM calificaciones WHERE alumno_id = ? AND asignacion_id = ? AND periodo = ?");
-            $stmt2->bind_param('iii', $al['id'], $asignacionId, $periodo);
-            $stmt2->execute();
-            $res2 = $stmt2->get_result();
-            while ($r = $res2->fetch_assoc()) {
-                $al['califs'][$r['aspecto_id']] = $r['calificacion'];
-            }
-            $alumnos[] = $al;
-        }
+        $alumnos = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 }
 
@@ -178,6 +232,7 @@ include __DIR__ . '/../includes/header.php';
 .tabla-calif th { background: #1e3a5f; color: white; }
 .tabla-calif td.alumno-nombre { text-align: left; white-space: nowrap; }
 .cal-input { width: 55px; padding: 0.2rem; text-align: center; border: 1px solid #ccc; border-radius: 4px; }
+.aus-input { width: 70px; padding: 0.3rem; text-align: center; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
 
 .idioma-btn {
     display: flex;
@@ -201,7 +256,6 @@ include __DIR__ . '/../includes/header.php';
     border-color: var(--color-primary);
     color: white;
 }
-
 .header-acciones {
     display: flex;
     justify-content: space-between;
@@ -210,15 +264,9 @@ include __DIR__ . '/../includes/header.php';
     flex-wrap: wrap;
     gap: 0.5rem;
 }
-.btn-danger {
-    background: #dc2626;
-    color: white;
-}
-.btn-danger:hover {
-    background: #b91c1c;
-}
+.btn-danger { background: #dc2626; color: white; }
+.btn-danger:hover { background: #b91c1c; }
 
-/* Notificación flotante */
 .notificacion-flotante {
     position: fixed;
     top: 20px;
@@ -229,31 +277,15 @@ include __DIR__ . '/../includes/header.php';
     animation: slideIn 0.3s ease-out;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
-.notificacion-flotante.success {
-    background: #10b981;
-    color: white;
-}
-.notificacion-flotante.error {
-    background: #ef4444;
-    color: white;
-}
+.notificacion-flotante.success { background: #10b981; color: white; }
+.notificacion-flotante.error   { background: #ef4444; color: white; }
 @keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
 }
 @keyframes fadeOut {
-    from {
-        opacity: 1;
-    }
-    to {
-        opacity: 0;
-    }
+    from { opacity: 1; }
+    to   { opacity: 0; }
 }
 </style>
 
@@ -330,14 +362,50 @@ include __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </form>
 
-        <?php if ($materiaId && $asignacionId && $alumnos): ?>
+        <?php if ($materiaId && $alumnos): ?>
+
+            <?php if ($esAusencias): ?>
+            <!-- ──────────────── AUSENCIAS ──────────────── -->
             <div class="header-acciones">
-                <h3 style="margin:0;">📖 <?= htmlspecialchars($nombreMateria) ?> - Periodo <?= $periodo ?></h3>
+                <h3 style="margin:0;">📖 <?= htmlspecialchars($nombreMateria) ?> — Periodo <?= $periodo ?></h3>
+            </div>
+            <form method="POST">
+                <input type="hidden" name="periodo" value="<?= $periodo ?>">
+                <table class="tabla-calif">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th style="text-align:left;">Alumno</th>
+                            <th>Días de ausencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php $i = 1; foreach ($alumnos as $al): ?>
+                        <tr>
+                            <td><?= $i++ ?></td>
+                            <td class="alumno-nombre"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
+                            <td>
+                                <input type="number"
+                                       name="dias[<?= $al['id'] ?>]"
+                                       value="<?= (int)$al['dias'] ?>"
+                                       min="0" max="31"
+                                       class="aus-input">
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <button type="submit" name="guardar_ausencias" class="btn" style="margin-top:1rem;">💾 Guardar ausencias</button>
+            </form>
+
+            <?php else: ?>
+            <!-- ──────────────── CALIFICACIONES NORMALES ──────────────── -->
+            <div class="header-acciones">
+                <h3 style="margin:0;">📖 <?= htmlspecialchars($nombreMateria) ?> — Periodo <?= $periodo ?></h3>
                 <button type="button" class="btn btn-danger" id="btnBorrarTodo">
                     🗑️ Borrar todas las calificaciones
                 </button>
             </div>
-
             <form method="POST" id="form-calificaciones">
                 <input type="hidden" name="asignacion_id" value="<?= $asignacionId ?>">
                 <input type="hidden" name="periodo" value="<?= $periodo ?>">
@@ -385,8 +453,9 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <button type="submit" name="guardar" class="btn" style="margin-top:1rem;">💾 Guardar cambios</button>
             </form>
+            <?php endif; ?>
 
-        <?php elseif ($materiaId && !$asignacionId): ?>
+        <?php elseif ($materiaId && !$esAusencias && !$asignacionId): ?>
             <p class="empty-state">⚠️ Esta materia no está asignada a este grupo.</p>
         <?php elseif ($grupo && !$materiaId): ?>
             <p class="empty-state">Selecciona un idioma y una materia para capturar calificaciones.</p>
@@ -396,42 +465,32 @@ include __DIR__ . '/../includes/header.php';
 
 <script>
 function mostrarNotificacion(mensaje, tipo) {
-    // Eliminar notificaciones existentes
     const notifExistente = document.querySelector('.notificacion-flotante');
-    if (notifExistente) {
-        notifExistente.remove();
-    }
-    
+    if (notifExistente) notifExistente.remove();
     const notif = document.createElement('div');
     notif.className = 'notificacion-flotante ' + tipo;
     notif.innerHTML = mensaje;
     document.body.appendChild(notif);
-    
     setTimeout(() => {
         notif.style.animation = 'fadeOut 0.3s ease-out';
-        setTimeout(() => {
-            if (notif.parentNode) notif.parentNode.removeChild(notif);
-        }, 300);
+        setTimeout(() => { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 300);
     }, 2000);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const modal = document.getElementById('confirmModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalBody = document.getElementById('modalBody');
+    const modal       = document.getElementById('confirmModal');
+    const modalTitle  = document.getElementById('modalTitle');
+    const modalBody   = document.getElementById('modalBody');
     const modalConfirm = document.getElementById('modalConfirm');
-    const modalCancel = document.getElementById('modalCancel');
-    
-    // Mostrar notificaciones si hay mensaje o error
+    const modalCancel  = document.getElementById('modalCancel');
+
     <?php if ($mensaje): ?>
         mostrarNotificacion('<?= addslashes($mensaje) ?>', 'success');
     <?php elseif ($error): ?>
         mostrarNotificacion('<?= addslashes($error) ?>', 'error');
     <?php endif; ?>
-    
-    // Botón de borrar todo
+
     const btnBorrar = document.getElementById('btnBorrarTodo');
-    
     if (btnBorrar) {
         btnBorrar.addEventListener('click', function(e) {
             e.preventDefault();
@@ -440,48 +499,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 <strong>Materia:</strong> <?= addslashes($nombreMateria) ?><br>
                 <strong>Periodo:</strong> <?= $periodo ?><br>
                 <strong>Grupo:</strong> <?= ucfirst($seccion) ?> <?= $grado ?>° <?= $grupo ?><br><br>
-                <span style="color: #dc2626;">⚠️ Esta acción NO se puede deshacer.</span>
+                <span style="color:#dc2626;">⚠️ Esta acción NO se puede deshacer.</span>
             `;
             modal.style.display = 'flex';
         });
     }
-    
+
     modalConfirm.addEventListener('click', function() {
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '';
-        
         const inputAsig = document.createElement('input');
-        inputAsig.type = 'hidden';
-        inputAsig.name = 'asignacion_id';
-        inputAsig.value = '<?= $asignacionId ?>';
-        
+        inputAsig.type = 'hidden'; inputAsig.name = 'asignacion_id'; inputAsig.value = '<?= $asignacionId ?>';
         const inputPeriodo = document.createElement('input');
-        inputPeriodo.type = 'hidden';
-        inputPeriodo.name = 'periodo_borrar';
-        inputPeriodo.value = '<?= $periodo ?>';
-        
+        inputPeriodo.type = 'hidden'; inputPeriodo.name = 'periodo_borrar'; inputPeriodo.value = '<?= $periodo ?>';
         const inputAction = document.createElement('input');
-        inputAction.type = 'hidden';
-        inputAction.name = 'borrar_todas';
-        inputAction.value = '1';
-        
+        inputAction.type = 'hidden'; inputAction.name = 'borrar_todas'; inputAction.value = '1';
         form.appendChild(inputAsig);
         form.appendChild(inputPeriodo);
         form.appendChild(inputAction);
         document.body.appendChild(form);
         form.submit();
     });
-    
-    modalCancel.addEventListener('click', function() {
-        modal.style.display = 'none';
-    });
-    
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            modal.style.display = 'none';
-        }
-    });
+
+    modalCancel.addEventListener('click', function() { modal.style.display = 'none'; });
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
 });
 
 function setIdioma(idioma) {

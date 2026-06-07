@@ -80,7 +80,23 @@ CREATE TABLE `asignacion_aspectos` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_aspecto` (`asignacion_id`,`nombre`),
   CONSTRAINT `asignacion_aspectos_ibfk_1` FOREIGN KEY (`asignacion_id`) REFERENCES `asignaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=334 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=358 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `asignacion_disciplina_aspectos` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `asignacion_id` int(10) unsigned DEFAULT NULL,
+  `grado` tinyint(3) unsigned NOT NULL DEFAULT 1,
+  `seccion` enum('maternal','preescolar','primaria','secundaria') NOT NULL DEFAULT 'primaria',
+  `nombre` varchar(100) NOT NULL,
+  `porcentaje` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `orden` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `activo` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_disciplina_aspecto` (`asignacion_id`,`nombre`),
+  CONSTRAINT `fk_disciplina_asig` FOREIGN KEY (`asignacion_id`) REFERENCES `asignaciones` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -113,7 +129,7 @@ CREATE TABLE `asignacion_maestros` (
   KEY `idx_profesor_activo` (`profesor_id`,`activo`),
   CONSTRAINT `fk_asigmaestro_asig` FOREIGN KEY (`asignacion_id`) REFERENCES `asignaciones` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_asigmaestro_prof` FOREIGN KEY (`profesor_id`) REFERENCES `profesores` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=65 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=69 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -135,7 +151,27 @@ CREATE TABLE `asignaciones` (
   CONSTRAINT `fk_asig_campo` FOREIGN KEY (`campo_formativo_id`) REFERENCES `campos_formativos` (`id`),
   CONSTRAINT `fk_asig_ciclo` FOREIGN KEY (`ciclo_id`) REFERENCES `ciclos_escolares` (`id`),
   CONSTRAINT `fk_asig_materia` FOREIGN KEY (`materia_id`) REFERENCES `materias` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=86 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=90 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `ausencias` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `alumno_id` int(10) unsigned NOT NULL,
+  `ciclo_id` int(10) unsigned NOT NULL,
+  `periodo` tinyint(3) unsigned NOT NULL COMMENT '1 al 6',
+  `dias_ausencia` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `capturado_por` int(10) unsigned NOT NULL,
+  `capturado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ausencia` (`alumno_id`,`ciclo_id`,`periodo`),
+  KEY `fk_ausencias_ciclo` (`ciclo_id`),
+  KEY `fk_ausencias_prof` (`capturado_por`),
+  CONSTRAINT `fk_ausencias_alumno` FOREIGN KEY (`alumno_id`) REFERENCES `alumnos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ausencias_ciclo` FOREIGN KEY (`ciclo_id`) REFERENCES `ciclos_escolares` (`id`),
+  CONSTRAINT `fk_ausencias_prof` FOREIGN KEY (`capturado_por`) REFERENCES `profesores` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -167,7 +203,7 @@ CREATE TABLE `calificaciones` (
   CONSTRAINT `calificaciones_ibfk_2` FOREIGN KEY (`asignacion_id`) REFERENCES `asignaciones` (`id`) ON DELETE CASCADE,
   CONSTRAINT `calificaciones_ibfk_3` FOREIGN KEY (`aspecto_id`) REFERENCES `asignacion_aspectos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `calificaciones_ibfk_4` FOREIGN KEY (`capturado_por`) REFERENCES `profesores` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=457 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=469 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -201,6 +237,26 @@ CREATE TABLE `calificaciones_backup` (
   `capturado_por` int(10) unsigned NOT NULL,
   `capturado_en` datetime NOT NULL DEFAULT current_timestamp(),
   `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `calificaciones_disciplina` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `alumno_id` int(10) unsigned NOT NULL,
+  `aspecto_id` int(10) unsigned NOT NULL,
+  `periodo` tinyint(3) unsigned NOT NULL,
+  `calificacion` decimal(5,2) DEFAULT NULL,
+  `capturado_por` int(10) unsigned NOT NULL,
+  `capturado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cali_disciplina` (`alumno_id`,`aspecto_id`,`periodo`),
+  KEY `fk_cali_disciplina_aspecto` (`aspecto_id`),
+  KEY `fk_cali_disciplina_prof` (`capturado_por`),
+  CONSTRAINT `fk_cali_disciplina_alumno` FOREIGN KEY (`alumno_id`) REFERENCES `alumnos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_cali_disciplina_aspecto` FOREIGN KEY (`aspecto_id`) REFERENCES `asignacion_disciplina_aspectos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_cali_disciplina_prof` FOREIGN KEY (`capturado_por`) REFERENCES `profesores` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -321,7 +377,7 @@ CREATE TABLE `grados_materias` (
   KEY `materia_id` (`materia_id`),
   KEY `idx_campo_formativo` (`campo_formativo_id`),
   CONSTRAINT `grados_materias_ibfk_1` FOREIGN KEY (`materia_id`) REFERENCES `materias` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=770 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=791 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -352,12 +408,14 @@ CREATE TABLE `materias` (
   `es_ingles` tinyint(1) NOT NULL DEFAULT 0,
   `es_artes` tinyint(1) NOT NULL DEFAULT 0,
   `es_higiene` tinyint(1) NOT NULL DEFAULT 0,
+  `es_disciplina` tinyint(1) NOT NULL DEFAULT 0,
+  `es_ausencias` tinyint(1) NOT NULL DEFAULT 0,
   `activo` tinyint(1) NOT NULL DEFAULT 1,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `fk_materia_campo` (`campo_formativo_id`),
   CONSTRAINT `fk_materia_campo` FOREIGN KEY (`campo_formativo_id`) REFERENCES `campos_formativos` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=297 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=299 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -402,7 +460,7 @@ CREATE TABLE `periodos_apertura` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_ciclo_periodo` (`ciclo_id`,`periodo`),
   CONSTRAINT `fk_periodo_ciclo` FOREIGN KEY (`ciclo_id`) REFERENCES `ciclos_escolares` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
