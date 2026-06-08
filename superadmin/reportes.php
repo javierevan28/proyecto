@@ -145,7 +145,8 @@ include __DIR__ . '/../includes/header.php';
       <table class="data-table">
         <thead>
           <tr>
-            <th rowspan="2" style="text-align:left; min-width:180px;">Alumno</th>
+            <th rowspan="2" style="text-align:center; min-width:40px; width:40px;">No.</th>
+            <th rowspan="2" style="text-align:left; min-width:220px;">Alumno</th>
             <?php foreach ($encabezados as $enc): ?>
               <th colspan="<?= $nCols ?>" style="font-size:.78rem; border-left:2px solid #2d5282; text-align:center;">
                 <?= htmlspecialchars($enc['label']) ?>
@@ -162,8 +163,10 @@ include __DIR__ . '/../includes/header.php';
           </tr>
         </thead>
         <tbody>
+          <?php $numero = 1; ?>
           <?php foreach ($alumnos as $al): ?>
             <tr>
+              <td style="font-size:.82rem; text-align:center; font-weight:bold;"><?= $numero++ ?></td>
               <td style="font-size:.82rem; text-align:left;"><?= htmlspecialchars($al['apellido_paterno'] . ' ' . ($al['apellido_materno'] ?? '') . ', ' . $al['nombre']) ?></td>
               <?php foreach ($al['columnas'] as $j => $col): ?>
                 <?php foreach ($col['valor'] as $v): ?>
