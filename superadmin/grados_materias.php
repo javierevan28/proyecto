@@ -1,5 +1,6 @@
 <?php
 // superadmin/grados_materias.php
+
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../models/MateriaModel.php';
@@ -13,6 +14,61 @@ $campoModelo = new CampoFormativoModel($db);
 $mensaje = null;
 $error = null;
 
+// ============================================================
+// FUNCIÓN PARA CREAR ASPECTOS POR DEFECTO DE UNA MATERIA
+// ============================================================
+function crearAspectosPorDefecto($db, $asignacion_id, $materia_nombre) {
+    $aspectosBase = [
+        ['nombre' => 'Examen', 'porcentaje' => 50.00, 'orden' => 1],
+        ['nombre' => 'Tareas', 'porcentaje' => 10.00, 'orden' => 2],
+        ['nombre' => 'Participación', 'porcentaje' => 10.00, 'orden' => 3],
+        ['nombre' => 'Evaluación parcial', 'porcentaje' => 10.00, 'orden' => 4],
+        ['nombre' => 'Proyecto', 'porcentaje' => 10.00, 'orden' => 5],
+        ['nombre' => 'Trabajos o exposición', 'porcentaje' => 10.00, 'orden' => 6]
+    ];
+    
+    $materiasEspeciales = [
+        'Inglés' => [
+            ['nombre' => 'Listening', 'porcentaje' => 25.00, 'orden' => 1],
+            ['nombre' => 'Speaking', 'porcentaje' => 25.00, 'orden' => 2],
+            ['nombre' => 'Reading', 'porcentaje' => 25.00, 'orden' => 3],
+            ['nombre' => 'Writing', 'porcentaje' => 25.00, 'orden' => 4]
+        ],
+        'Educación Física' => [
+            ['nombre' => 'Participación', 'porcentaje' => 40.00, 'orden' => 1],
+            ['nombre' => 'Habilidades', 'porcentaje' => 30.00, 'orden' => 2],
+            ['nombre' => 'Trabajo en equipo', 'porcentaje' => 30.00, 'orden' => 3]
+        ]
+    ];
+    
+    $aspectos = $aspectosBase;
+    foreach ($materiasEspeciales as $materia => $aspectosEspeciales) {
+        if (stripos($materia_nombre, $materia) !== false) {
+            $aspectos = $aspectosEspeciales;
+            break;
+        }
+    }
+    
+    $insertados = 0;
+    foreach ($aspectos as $aspecto) {
+        $stmt = $db->prepare("INSERT INTO asignacion_aspectos (asignacion_id, nombre, porcentaje, orden, activo) VALUES (?, ?, ?, ?, 1)");
+        $stmt->bind_param('isdi', $asignacion_id, $aspecto['nombre'], $aspecto['porcentaje'], $aspecto['orden']);
+        if ($stmt->execute()) {
+            $insertados++;
+        }
+    }
+    return $insertados;
+}
+
+// ============================================================
+// FUNCIÓN PARA OBTENER EL CICLO ACTIVO
+// ============================================================
+function getCicloActivo($db) {
+    $stmt = $db->query("SELECT id FROM ciclos_escolares WHERE activo = 1 LIMIT 1");
+    $ciclo = $stmt->fetch_assoc();
+    return $ciclo ? $ciclo['id'] : null;
+}
+
 // Procesar guardar
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar'])) {
     $seccion = $_POST['seccion'];
@@ -21,106 +77,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar'])) {
     $ordenes = $_POST['orden'] ?? [];
     $camposFormativos = $_POST['campo_formativo'] ?? [];
     
-    // ============================================================
-    // 1. Obtener materias que estaban asignadas ANTES
-    // ============================================================
-    $stmtOld = $db->prepare("SELECT materia_id FROM grados_materias WHERE seccion = ? AND grado = ?");
-    $stmtOld->bind_param('si', $seccion, $grado);
-    $stmtOld->execute();
-    $materiasViejas = $stmtOld->get_result()->fetch_all(MYSQLI_ASSOC);
-    $materiasViejasIds = array_column($materiasViejas, 'materia_id');
+    $ciclo_activo_id = getCicloActivo($db);
     
-    // ============================================================
-    // 2. Materias que fueron DESMARCADAS (ya no están seleccionadas)
-    // ============================================================
-    $materiasEliminadas = array_diff($materiasViejasIds, $materiasSeleccionadas);
-    
-    // ============================================================
-    // 3. SI SE DESMARCA UNA MATERIA, ELIMINAR TODAS SUS ASIGNACIONES DE GRUPOS
-    // ============================================================
-    if (!empty($materiasEliminadas)) {
-        $placeholders = implode(',', array_fill(0, count($materiasEliminadas), '?'));
+    if (!$ciclo_activo_id) {
+        $error = "No hay un ciclo escolar activo. Por favor, activa un ciclo primero.";
+    } else {
+        // Obtener materias que estaban asignadas ANTES
+        $stmtOld = $db->prepare("SELECT materia_id FROM grados_materias WHERE seccion = ? AND grado = ?");
+        $stmtOld->bind_param('si', $seccion, $grado);
+        $stmtOld->execute();
+        $materiasViejas = $stmtOld->get_result()->fetch_all(MYSQLI_ASSOC);
+        $materiasViejasIds = array_column($materiasViejas, 'materia_id');
         
-        // Eliminar asignacion_maestros
-        $sql1 = "DELETE FROM asignacion_maestros WHERE asignacion_id IN (
-            SELECT id FROM asignaciones 
-            WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
-        )";
-        $stmt1 = $db->prepare($sql1);
-        $types = 'si' . str_repeat('i', count($materiasEliminadas));
-        $params = array_merge([$seccion, $grado], $materiasEliminadas);
-        $stmt1->bind_param($types, ...$params);
-        $stmt1->execute();
+        // Materias que fueron DESMARCADAS
+        $materiasEliminadas = array_diff($materiasViejasIds, $materiasSeleccionadas);
         
-        // Eliminar asignacion_artes
-        $sql2 = "DELETE FROM asignacion_artes WHERE asignacion_id IN (
-            SELECT id FROM asignaciones 
-            WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
-        )";
-        $stmt2 = $db->prepare($sql2);
-        $stmt2->bind_param($types, ...$params);
-        $stmt2->execute();
-        
-        // Eliminar asignacion_ingles_aspectos
-        $sql3 = "DELETE FROM asignacion_ingles_aspectos WHERE asignacion_id IN (
-            SELECT id FROM asignaciones 
-            WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
-        )";
-        $stmt3 = $db->prepare($sql3);
-        $stmt3->bind_param($types, ...$params);
-        $stmt3->execute();
-        
-        // CAMBIO: Eliminar asignacion_disciplina_aspectos si la materia es Disciplina
-        $sql3b = "DELETE FROM asignacion_disciplina_aspectos WHERE asignacion_id IN (
-            SELECT id FROM asignaciones 
-            WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
-        )";
-        $stmt3b = $db->prepare($sql3b);
-        $stmt3b->bind_param($types, ...$params);
-        $stmt3b->execute();
-        
-        // Eliminar asignaciones
-        $sql4 = "DELETE FROM asignaciones WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)";
-        $stmt4 = $db->prepare($sql4);
-        $stmt4->bind_param($types, ...$params);
-        $stmt4->execute();
-    }
-    
-    // ============================================================
-    // 4. Eliminar asignaciones existentes de este grado en grados_materias
-    // ============================================================
-    $stmtDel = $db->prepare("DELETE FROM grados_materias WHERE seccion = ? AND grado = ?");
-    $stmtDel->bind_param('si', $seccion, $grado);
-    $stmtDel->execute();
-    
-    // ============================================================
-    // 5. Insertar nuevas materias seleccionadas
-    // ============================================================
-    foreach ($materiasSeleccionadas as $materiaId) {
-        $orden = isset($ordenes[$materiaId]) ? (int)$ordenes[$materiaId] : 0;
-        $campoId = isset($camposFormativos[$materiaId]) && !empty($camposFormativos[$materiaId]) 
-            ? (int)$camposFormativos[$materiaId] 
-            : null;
-        
-        $stmtIns = $db->prepare("INSERT INTO grados_materias (seccion, grado, materia_id, campo_formativo_id, orden) VALUES (?, ?, ?, ?, ?)");
-        $stmtIns->bind_param('siiii', $seccion, $grado, $materiaId, $campoId, $orden);
-        $stmtIns->execute();
-        
-        // CAMBIO: Si la materia es Disciplina, crear sus aspectos por defecto
-        $stmtCheckMateria = $db->prepare("SELECT nombre, es_disciplina, es_ausencias FROM materias WHERE id = ?");
-        $stmtCheckMateria->bind_param('i', $materiaId);
-        $stmtCheckMateria->execute();
-        $materiaInfo = $stmtCheckMateria->get_result()->fetch_assoc();
-        
-        if ($materiaInfo && isset($materiaInfo['es_disciplina']) && $materiaInfo['es_disciplina'] == 1) {
-            // Crear asignacion para este grado/grupo? No, la asignacion se crea cuando se asigna el profesor
-            // Solo registramos que ya existe en grados_materias
+        if (!empty($materiasEliminadas)) {
+            $placeholders = implode(',', array_fill(0, count($materiasEliminadas), '?'));
+            $sql1 = "DELETE FROM asignacion_maestros WHERE asignacion_id IN (
+                SELECT id FROM asignaciones 
+                WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+            )";
+            $stmt1 = $db->prepare($sql1);
+            $types = 'si' . str_repeat('i', count($materiasEliminadas));
+            $params = array_merge([$seccion, $grado], $materiasEliminadas);
+            $stmt1->bind_param($types, ...$params);
+            $stmt1->execute();
+            
+            $sql2 = "DELETE FROM asignacion_artes WHERE asignacion_id IN (
+                SELECT id FROM asignaciones 
+                WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+            )";
+            $stmt2 = $db->prepare($sql2);
+            $stmt2->bind_param($types, ...$params);
+            $stmt2->execute();
+            
+            $sql3 = "DELETE FROM asignacion_ingles_aspectos WHERE asignacion_id IN (
+                SELECT id FROM asignaciones 
+                WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+            )";
+            $stmt3 = $db->prepare($sql3);
+            $stmt3->bind_param($types, ...$params);
+            $stmt3->execute();
+            
+            $sql3b = "DELETE FROM asignacion_disciplina_aspectos WHERE asignacion_id IN (
+                SELECT id FROM asignaciones 
+                WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+            )";
+            $stmt3b = $db->prepare($sql3b);
+            $stmt3b->bind_param($types, ...$params);
+            $stmt3b->execute();
+            
+            $sql3c = "DELETE FROM asignacion_aspectos WHERE asignacion_id IN (
+                SELECT id FROM asignaciones 
+                WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)
+            )";
+            $stmt3c = $db->prepare($sql3c);
+            $stmt3c->bind_param($types, ...$params);
+            $stmt3c->execute();
+            
+            $sql4 = "DELETE FROM asignaciones WHERE seccion = ? AND grado = ? AND materia_id IN ($placeholders)";
+            $stmt4 = $db->prepare($sql4);
+            $stmt4->bind_param($types, ...$params);
+            $stmt4->execute();
         }
-    }
-    
-    $mensaje = "Materias asignadas correctamente al grado.";
-    if (!empty($materiasEliminadas)) {
-        $mensaje .= " Se eliminaron " . count($materiasEliminadas) . " materia(s) y sus asignaciones de grupos.";
+        
+        // Eliminar asignaciones existentes de este grado en grados_materias
+        $stmtDel = $db->prepare("DELETE FROM grados_materias WHERE seccion = ? AND grado = ?");
+        $stmtDel->bind_param('si', $seccion, $grado);
+        $stmtDel->execute();
+        
+        // Insertar nuevas materias seleccionadas
+        $grupos = ['A', 'B', 'C', 'D'];
+        
+        foreach ($materiasSeleccionadas as $materiaId) {
+            $orden = isset($ordenes[$materiaId]) ? (int)$ordenes[$materiaId] : 0;
+            $campoId = isset($camposFormativos[$materiaId]) && !empty($camposFormativos[$materiaId]) 
+                ? (int)$camposFormativos[$materiaId] 
+                : null;
+            
+            $stmtIns = $db->prepare("INSERT INTO grados_materias (seccion, grado, materia_id, campo_formativo_id, orden) VALUES (?, ?, ?, ?, ?)");
+            $stmtIns->bind_param('siiii', $seccion, $grado, $materiaId, $campoId, $orden);
+            $stmtIns->execute();
+            
+            $stmtInfo = $db->prepare("SELECT nombre, es_ingles, es_artes, es_higiene, es_disciplina, es_ausencias FROM materias WHERE id = ?");
+            $stmtInfo->bind_param('i', $materiaId);
+            $stmtInfo->execute();
+            $materiaInfo = $stmtInfo->get_result()->fetch_assoc();
+            
+            foreach ($grupos as $grupo) {
+                $stmtCheck = $db->prepare("SELECT id FROM asignaciones WHERE ciclo_id = ? AND materia_id = ? AND seccion = ? AND grado = ? AND grupo = ?");
+                $stmtCheck->bind_param('iisis', $ciclo_activo_id, $materiaId, $seccion, $grado, $grupo);
+                $stmtCheck->execute();
+                $asignacionExistente = $stmtCheck->get_result()->fetch_assoc();
+                
+                if (!$asignacionExistente) {
+                    $stmtAsig = $db->prepare("INSERT INTO asignaciones (ciclo_id, materia_id, campo_formativo_id, seccion, grado, grupo, orden, activo) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
+                    $stmtAsig->bind_param('iiisisi', $ciclo_activo_id, $materiaId, $campoId, $seccion, $grado, $grupo, $orden);
+                    $stmtAsig->execute();
+                    $nuevaAsignacionId = $db->insert_id;
+                    
+                    $esMateriaEspecial = ($materiaInfo['es_ingles'] == 1 || 
+                                          $materiaInfo['es_artes'] == 1 || 
+                                          $materiaInfo['es_higiene'] == 1 ||
+                                          $materiaInfo['es_disciplina'] == 1 ||
+                                          $materiaInfo['es_ausencias'] == 1);
+                    
+                    if (!$esMateriaEspecial) {
+                        crearAspectosPorDefecto($db, $nuevaAsignacionId, $materiaInfo['nombre']);
+                    }
+                }
+            }
+        }
+        
+        $mensaje = "Materias asignadas correctamente al grado.";
+        if (!empty($materiasEliminadas)) {
+            $mensaje .= " Se eliminaron " . count($materiasEliminadas) . " materia(s) y sus asignaciones de grupos.";
+        }
     }
 }
 
@@ -132,16 +205,42 @@ $grados = [1, 2, 3, 4, 5, 6];
 $todasMaterias = $materiaModelo->listarActivas();
 $camposDisponibles = $campoModelo->listarActivos();
 
+// ============================================================
+// LIMPIAR MATERIAS DUPLICADAS POR NOMBRE (PERO NO INGLÉS NI ARTES)
+// ============================================================
+$materiasUnicas = [];
+$nombresVistos = [];
+foreach ($todasMaterias as $m) {
+    $nombre = $m['nombre'];
+    $esInglesArtes = ($nombre === 'Inglés' || $nombre === 'Artes');
+    
+    if ($esInglesArtes) {
+        // Para Inglés y Artes, mantener todas (cada grado tiene la suya)
+        $materiasUnicas[] = $m;
+    } else {
+        // Para las demás, eliminar duplicados por nombre
+        if (!in_array($nombre, $nombresVistos)) {
+            $nombresVistos[] = $nombre;
+            $materiasUnicas[] = $m;
+        }
+    }
+}
+$todasMaterias = $materiasUnicas;
+
 // Separar materias por tipo
 $materiasBase = [];
 $materiasIngles = [];
 $materiasArtes = [];
 $materiasCocurriculares = [];
 $materiasHigiene = [];
-$materiasDisciplina = [];  // CAMBIO
-$materiasAusencias = [];   // CAMBIO
+$materiasDisciplina = [];
+$materiasAusencias = [];
+$materiasCiencias = [];
+$materiasLaboratorio = [];
 
 foreach ($todasMaterias as $m) {
+    $nombre = $m['nombre'];
+    
     if ((int)$m['es_ingles'] === 1) {
         $materiasIngles[] = $m;
     } elseif ((int)$m['es_artes'] === 1) {
@@ -152,13 +251,14 @@ foreach ($todasMaterias as $m) {
         $materiasDisciplina[] = $m;
     } elseif (isset($m['es_ausencias']) && (int)$m['es_ausencias'] === 1) {
         $materiasAusencias[] = $m;
+    } elseif ($nombre === 'Laboratorio') {
+        $materiasLaboratorio[] = $m;
+    } elseif (in_array($nombre, ['Física', 'Química', 'Biología'])) {
+        $materiasCiencias[] = $m;
+    } elseif (in_array($nombre, ['Educación Física', 'Tecnología', 'Francés'])) {
+        $materiasCocurriculares[] = $m;
     } else {
-        $cocurriculares = ['Educación Física', 'Tecnología', 'Francés'];
-        if (in_array($m['nombre'], $cocurriculares)) {
-            $materiasCocurriculares[] = $m;
-        } else {
-            $materiasBase[] = $m;
-        }
+        $materiasBase[] = $m;
     }
 }
 
@@ -222,7 +322,7 @@ include __DIR__ . '/../includes/header.php';
     }
     .materias-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
         gap: 0.5rem;
         margin-bottom: 1.5rem;
         max-height: 500px;
@@ -281,6 +381,23 @@ include __DIR__ . '/../includes/header.php';
         font-size: 0.6rem;
         padding: 0.1rem 0.3rem;
         margin-left: 0.3rem;
+        border-radius: 10px;
+    }
+    .badge--disciplina {
+        background: #e74c3c;
+        color: white;
+    }
+    .badge--ausencias {
+        background: #f39c12;
+        color: white;
+    }
+    .badge--ciencias {
+        background: #2ecc71;
+        color: white;
+    }
+    .badge--laboratorio {
+        background: #9b59b6;
+        color: white;
     }
     .select-all {
         margin-bottom: 0.5rem;
@@ -292,9 +409,6 @@ include __DIR__ . '/../includes/header.php';
     .select-all label {
         font-size: 0.75rem;
         cursor: pointer;
-    }
-    .campo-select {
-        font-size: 0.75rem;
     }
     .btn {
         margin-top: 1rem;
@@ -313,17 +427,6 @@ include __DIR__ . '/../includes/header.php';
         color: #fff;
         width: 80px;
     }
-    .data-table tbody tr:last-child td:first-child {
-        border-bottom-left-radius: var(--radius-sm);
-    }
-    .badge--disciplina {
-        background: #e74c3c;
-        color: white;
-    }
-    .badge--ausencias {
-        background: #f39c12;
-        color: white;
-    }
 </style>
 
 <main class="container">
@@ -332,13 +435,12 @@ include __DIR__ . '/../includes/header.php';
         <p class="form-hint">Define qué materias se imparten en cada grado. Usa las pestañas para filtrar por tipo.</p>
 
         <?php if ($mensaje): ?>
-            <p class="alert alert--success">✅ <?= $mensaje ?></p>
+            <p class="alert alert--success">✅ <?= htmlspecialchars($mensaje) ?></p>
         <?php endif; ?>
         <?php if ($error): ?>
-            <p class="alert alert--error">⚠️ <?= $error ?></p>
+            <p class="alert alert--error">⚠️ <?= htmlspecialchars($error) ?></p>
         <?php endif; ?>
 
-        <!-- Selector de sección y grado -->
         <form method="GET" style="margin-bottom: 1.5rem;">
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                 <div class="form-group" style="margin-bottom: 0;">
@@ -364,16 +466,16 @@ include __DIR__ . '/../includes/header.php';
             <input type="hidden" name="seccion" value="<?= $seccionActual ?>">
             <input type="hidden" name="grado" value="<?= $gradoActual ?>">
             
-            <!-- Pestañas -->
             <div class="tabs">
                 <button type="button" class="tab-btn <?= $tabActual === 'base' ? 'active' : '' ?>" data-tab="base">📘 Materias Base</button>
+                <button type="button" class="tab-btn <?= $tabActual === 'ciencias' ? 'active' : '' ?>" data-tab="ciencias">🔬 Ciencias</button>
+                <button type="button" class="tab-btn <?= $tabActual === 'laboratorio' ? 'active' : '' ?>" data-tab="laboratorio">🧪 Laboratorio</button>
                 <button type="button" class="tab-btn <?= $tabActual === 'ingles' ? 'active' : '' ?>" data-tab="ingles">🌐 Inglés</button>
                 <button type="button" class="tab-btn <?= $tabActual === 'artes' ? 'active' : '' ?>" data-tab="artes">🎨 Artes</button>
                 <button type="button" class="tab-btn <?= $tabActual === 'cocurriculares' ? 'active' : '' ?>" data-tab="cocurriculares">🏃 Cocurriculares</button>
                 <?php if (!empty($materiasHigiene)): ?>
                     <button type="button" class="tab-btn <?= $tabActual === 'higiene' ? 'active' : '' ?>" data-tab="higiene">🧼 Higiene</button>
                 <?php endif; ?>
-                <!-- CAMBIO: Pestañas nuevas -->
                 <?php if (!empty($materiasDisciplina)): ?>
                     <button type="button" class="tab-btn <?= $tabActual === 'disciplina' ? 'active' : '' ?>" data-tab="disciplina">⚠️ Disciplina</button>
                 <?php endif; ?>
@@ -421,6 +523,90 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Pestaña Ciencias -->
+            <div id="tab-ciencias" class="tab-pane <?= $tabActual === 'ciencias' ? 'active' : '' ?>">
+                <div class="select-all">
+                    <input type="checkbox" id="select-all-ciencias" onchange="toggleAll('ciencias', this.checked)">
+                    <label for="select-all-ciencias">Seleccionar todas las materias de Ciencias</label>
+                </div>
+                <div class="materias-grid" id="grid-ciencias">
+                    <?php foreach ($materiasCiencias as $m): ?>
+                        <?php 
+                        $checked = in_array($m['id'], $materiasAsignadasIds);
+                        $ordenActual = '';
+                        $campoActual = $m['campo_formativo_id'] ?? '';
+                        foreach ($materiasAsignadas as $ma) {
+                            if ($ma['materia_id'] == $m['id']) {
+                                $ordenActual = $ma['orden'];
+                                $campoActual = $ma['campo_formativo_id'] ?? $m['campo_formativo_id'] ?? '';
+                                break;
+                            }
+                        }
+                        ?>
+                        <div class="materia-item">
+                            <div class="materia-info">
+                                <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="ciencias_<?= $m['id'] ?>" class="cb-ciencias" <?= $checked ? 'checked' : '' ?>>
+                                <label for="ciencias_<?= $m['id'] ?>" class="materia-nombre">
+                                    <?= htmlspecialchars($m['nombre']) ?>
+                                    <span class="badge-mini badge--ciencias">Ciencias</span>
+                                </label>
+                            </div>
+                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
+                                <option value="">Sin campo formativo</option>
+                                <?php foreach ($camposDisponibles as $cf): ?>
+                                    <option value="<?= $cf['id'] ?>" <?= $campoActual == $cf['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cf['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <!-- Pestaña Laboratorio -->
+            <div id="tab-laboratorio" class="tab-pane <?= $tabActual === 'laboratorio' ? 'active' : '' ?>">
+                <div class="select-all">
+                    <input type="checkbox" id="select-all-laboratorio" onchange="toggleAll('laboratorio', this.checked)">
+                    <label for="select-all-laboratorio">Seleccionar todas las materias de Laboratorio</label>
+                </div>
+                <div class="materias-grid" id="grid-laboratorio">
+                    <?php foreach ($materiasLaboratorio as $m): ?>
+                        <?php 
+                        $checked = in_array($m['id'], $materiasAsignadasIds);
+                        $ordenActual = '';
+                        $campoActual = $m['campo_formativo_id'] ?? '';
+                        foreach ($materiasAsignadas as $ma) {
+                            if ($ma['materia_id'] == $m['id']) {
+                                $ordenActual = $ma['orden'];
+                                $campoActual = $ma['campo_formativo_id'] ?? '';
+                                break;
+                            }
+                        }
+                        ?>
+                        <div class="materia-item">
+                            <div class="materia-info">
+                                <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="laboratorio_<?= $m['id'] ?>" class="cb-laboratorio" <?= $checked ? 'checked' : '' ?>>
+                                <label for="laboratorio_<?= $m['id'] ?>" class="materia-nombre">
+                                    <?= htmlspecialchars($m['nombre']) ?>
+                                    <span class="badge-mini badge--laboratorio">Laboratorio</span>
+                                </label>
+                            </div>
+                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
+                                <option value="">Sin campo formativo</option>
+                                <?php foreach ($camposDisponibles as $cf): ?>
+                                    <option value="<?= $cf['id'] ?>" <?= $campoActual == $cf['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cf['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
             <!-- Pestaña Inglés -->
             <div id="tab-ingles" class="tab-pane <?= $tabActual === 'ingles' ? 'active' : '' ?>">
                 <div class="select-all">
@@ -440,20 +626,13 @@ include __DIR__ . '/../includes/header.php';
                                 break;
                             }
                         }
-                        $gradoTexto = '';
-                        if ($seccionActual === 'secundaria') {
-                            $gradoTexto = $gradoActual . ' Sec';
-                        } else {
-                            $gradoTexto = $gradoActual . '°';
-                        }
-                        $nombreMostrar = $gradoTexto . ' - ' . $m['nombre'];
                         ?>
                         <div class="materia-item">
                             <div class="materia-info">
                                 <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="ingles_<?= $m['id'] ?>" class="cb-ingles" <?= $checked ? 'checked' : '' ?>>
                                 <label for="ingles_<?= $m['id'] ?>" class="materia-nombre">
-                                    <?= htmlspecialchars($nombreMostrar) ?>
-                                    <span class="badge badge-mini">Inglés</span>
+                                    <?= htmlspecialchars($m['nombre']) ?>
+                                    <span class="badge-mini">Inglés</span>
                                 </label>
                             </div>
                             <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
@@ -495,7 +674,7 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="artes_<?= $m['id'] ?>" class="cb-artes" <?= $checked ? 'checked' : '' ?>>
                                 <label for="artes_<?= $m['id'] ?>" class="materia-nombre">
                                     <?= htmlspecialchars($m['nombre']) ?>
-                                    <span class="badge badge-mini">Artes</span>
+                                    <span class="badge-mini">Artes</span>
                                 </label>
                             </div>
                             <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
@@ -577,7 +756,7 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="higiene_<?= $m['id'] ?>" class="cb-higiene" <?= $checked ? 'checked' : '' ?>>
                                 <label for="higiene_<?= $m['id'] ?>" class="materia-nombre">
                                     <?= htmlspecialchars($m['nombre']) ?>
-                                    <span class="badge badge-mini badge--warn">Higiene</span>
+                                    <span class="badge-mini">Higiene</span>
                                 </label>
                             </div>
                             <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select">
@@ -595,7 +774,7 @@ include __DIR__ . '/../includes/header.php';
             </div>
             <?php endif; ?>
 
-            <!-- CAMBIO: Pestaña Disciplina -->
+            <!-- Pestaña Disciplina -->
             <?php if (!empty($materiasDisciplina)): ?>
             <div id="tab-disciplina" class="tab-pane <?= $tabActual === 'disciplina' ? 'active' : '' ?>">
                 <div class="select-all">
@@ -607,7 +786,6 @@ include __DIR__ . '/../includes/header.php';
                         <?php 
                         $checked = in_array($m['id'], $materiasAsignadasIds);
                         $ordenActual = '';
-                        $campoActual = '';
                         foreach ($materiasAsignadas as $ma) {
                             if ($ma['materia_id'] == $m['id']) {
                                 $ordenActual = $ma['orden'];
@@ -620,12 +798,11 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="disciplina_<?= $m['id'] ?>" class="cb-disciplina" <?= $checked ? 'checked' : '' ?>>
                                 <label for="disciplina_<?= $m['id'] ?>" class="materia-nombre">
                                     <?= htmlspecialchars($m['nombre']) ?>
-                                    <span class="badge badge-mini badge--disciplina">Disciplina</span>
+                                    <span class="badge-mini badge--disciplina">Disciplina</span>
                                 </label>
                             </div>
-                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select" disabled>
-                                <option value="">Sin campo formativo</option>
-                            </select>
+                            <span class="form-hint" style="font-size:0.7rem;">(No aplican aspectos de calificación)</span>
+                            <input type="hidden" name="campo_formativo[<?= $m['id'] ?>]" value="">
                             <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
                         </div>
                     <?php endforeach; ?>
@@ -633,7 +810,7 @@ include __DIR__ . '/../includes/header.php';
             </div>
             <?php endif; ?>
 
-            <!-- CAMBIO: Pestaña Ausencias -->
+            <!-- Pestaña Ausencias -->
             <?php if (!empty($materiasAusencias)): ?>
             <div id="tab-ausencias" class="tab-pane <?= $tabActual === 'ausencias' ? 'active' : '' ?>">
                 <div class="select-all">
@@ -645,7 +822,6 @@ include __DIR__ . '/../includes/header.php';
                         <?php 
                         $checked = in_array($m['id'], $materiasAsignadasIds);
                         $ordenActual = '';
-                        $campoActual = '';
                         foreach ($materiasAsignadas as $ma) {
                             if ($ma['materia_id'] == $m['id']) {
                                 $ordenActual = $ma['orden'];
@@ -658,12 +834,11 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="checkbox" name="materias[]" value="<?= $m['id'] ?>" id="ausencias_<?= $m['id'] ?>" class="cb-ausencias" <?= $checked ? 'checked' : '' ?>>
                                 <label for="ausencias_<?= $m['id'] ?>" class="materia-nombre">
                                     <?= htmlspecialchars($m['nombre']) ?>
-                                    <span class="badge badge-mini badge--ausencias">Ausencias</span>
+                                    <span class="badge-mini badge--ausencias">Ausencias</span>
                                 </label>
                             </div>
-                            <select name="campo_formativo[<?= $m['id'] ?>]" class="campo-select" disabled>
-                                <option value="">Sin campo formativo</option>
-                            </select>
+                            <span class="form-hint" style="font-size:0.7rem;">(No aplican aspectos de calificación)</span>
+                            <input type="hidden" name="campo_formativo[<?= $m['id'] ?>]" value="">
                             <input type="number" name="orden[<?= $m['id'] ?>]" value="<?= $ordenActual ?>" class="orden-input" placeholder="Ord" min="0">
                         </div>
                     <?php endforeach; ?>
