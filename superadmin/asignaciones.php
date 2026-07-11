@@ -23,6 +23,32 @@ $resultado = null;
 $accion    = $_GET['accion'] ?? '';
 $editId    = (int)($_GET['id'] ?? 0);
 
+// ============================================================
+// API PARA GRUPOS (integrada en el mismo archivo)
+// ============================================================
+if (isset($_GET['api']) && $_GET['api'] === 'grupos') {
+    header('Content-Type: application/json');
+    $seccion = $_GET['seccion'] ?? '';
+    $grado = (int)($_GET['grado'] ?? 0);
+    
+    if (!$seccion || !$grado) {
+        echo json_encode([]);
+        exit;
+    }
+    
+    $stmt = $db->prepare("SELECT id, nombre FROM grupos WHERE seccion = ? AND grado = ? AND activo = 1 ORDER BY orden");
+    $stmt->bind_param('si', $seccion, $grado);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $grupos = [];
+    while ($row = $result->fetch_assoc()) {
+        $grupos[] = ['id' => $row['id'], 'nombre' => $row['nombre']];
+    }
+    echo json_encode($grupos);
+    exit;
+}
+
 if ($accion === 'desactivar' && $editId > 0) {
     $resultado = $asigModelo->toggleActivo($editId, 0);
     $msg = isset($resultado['success']) ? 'desactivado' : 'error';
@@ -133,19 +159,15 @@ include __DIR__ . '/../includes/header.php';
             <label for="grado">Grado *</label>
             <select id="grado" name="grado" required>
               <option value="">Selecciona…</option>
-              <?php for ($i = 1; $i <= 6; $i++): ?>
-                <option value="<?= $i ?>"><?= $i ?>°</option>
-              <?php endfor; ?>
+              <option value="1">1°</option><option value="2">2°</option><option value="3">3°</option>
+              <option value="4">4°</option><option value="5">5°</option><option value="6">6°</option>
             </select>
           </div>
 
           <div class="form-group">
             <label for="grupo">Grupo *</label>
             <select id="grupo" name="grupo" required>
-              <option value="">Selecciona…</option>
-              <?php foreach (['A','B','C','D'] as $grp): ?>
-                <option value="<?= $grp ?>"><?= $grp ?></option>
-              <?php endforeach; ?>
+              <option value="">Primero selecciona sección y grado</option>
             </select>
           </div>
 
@@ -270,39 +292,12 @@ include __DIR__ . '/../includes/header.php';
   gap: 1.5rem;
   align-items: start;
 }
-
-.asignaciones-formulario {
-  min-width: 0;
-}
-
-.asignaciones-listado {
-  min-width: 0;
-}
-
-.separator {
-  margin: 1rem 0;
-  border: none;
-  border-top: 1px solid var(--color-border);
-}
-
-.grupo-asignaciones {
-  margin-bottom: 1.5rem;
-}
-
-.grupo-titulo {
-  font-size: 0.95rem;
-  color: var(--color-primary);
-  margin-bottom: 0.5rem;
-}
-
-.estado-cell {
-  text-align: center;
-}
-
-.acciones-cell {
-  text-align: center;
-}
-
+.asignaciones-formulario { min-width: 0; }
+.asignaciones-listado { min-width: 0; }
+.separator { margin: 1rem 0; border: none; border-top: 1px solid var(--color-border); }
+.grupo-asignaciones { margin-bottom: 1.5rem; }
+.grupo-titulo { font-size: 0.95rem; color: var(--color-primary); margin-bottom: 0.5rem; }
+.estado-cell, .acciones-cell { text-align: center; }
 .maestro-row {
   display: flex;
   gap: 0.5rem;
@@ -313,100 +308,19 @@ include __DIR__ . '/../includes/header.php';
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
 }
-
-.maestro-row select {
-  flex: 2;
-  padding: 0.4rem;
-  border: 1px solid #ccd3db;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  font-family: var(--font);
-  background: var(--color-surface);
-}
-
-.maestro-row .checkbox-titular {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.75rem;
-  white-space: nowrap;
-  color: var(--color-muted);
-  cursor: pointer;
-}
-
-.maestro-row .checkbox-titular input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--color-primary);
-}
-
-.btn-add-maestro {
-  margin-top: 0.5rem;
-  width: 100%;
-  background: var(--color-accent);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 0.5rem;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-add-maestro:hover {
-  background: #2563eb;
-}
-
-.materia-bloque {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 0.8rem;
-  margin-bottom: 0.8rem;
-  background: var(--color-surface);
-  transition: box-shadow 0.15s;
-}
-
-.materia-bloque:hover {
-  box-shadow: var(--shadow);
-}
-
-.materia-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.8rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.badge-titular {
-  background: #d1fae5;
-  color: #065f46;
-}
-
+.maestro-row select { flex: 2; padding: 0.4rem; border: 1px solid #ccd3db; border-radius: 4px; font-size: 0.85rem; }
+.maestro-row .checkbox-titular { display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; white-space: nowrap; cursor: pointer; }
+.maestro-row .checkbox-titular input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--color-primary); }
+.btn-add-maestro { margin-top: 0.5rem; width: 100%; background: var(--color-accent); color: white; border: none; border-radius: var(--radius-sm); padding: 0.5rem; font-size: 0.8rem; cursor: pointer; }
+.btn-add-maestro:hover { background: #2563eb; }
+.materia-bloque { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.8rem; margin-bottom: 0.8rem; background: var(--color-surface); }
+.materia-bloque:hover { box-shadow: var(--shadow); }
+.materia-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-border); }
 @media (max-width: 700px) {
-  .asignaciones-layout {
-    grid-template-columns: 1fr;
-  }
-  
-  .maestro-row {
-    flex-wrap: wrap;
-  }
-  
-  .maestro-row select {
-    flex: 1 1 100%;
-    margin-bottom: 0.3rem;
-  }
-  
-  .maestro-row .checkbox-titular {
-    flex: 1;
-  }
-  
-  .btn-add-maestro {
-    width: 100%;
-  }
+  .asignaciones-layout { grid-template-columns: 1fr; }
+  .maestro-row { flex-wrap: wrap; }
+  .maestro-row select { flex: 1 1 100%; margin-bottom: 0.3rem; }
+  .btn-add-maestro { width: 100%; }
 }
 </style>
 
@@ -424,15 +338,10 @@ function getProfesoresPorMateria(materia) {
     const esHigiene = parseInt(materia.es_higiene);
     const nombre = materia.nombre.toLowerCase();
     
-    if (esArtes || esHigiene) {
-        return COCURRICULARES;
-    } else if (esIngles) {
-        return TITULARES;
-    } else if (nombre.includes('franc')) {
-        return FRANCES;
-    } else {
-        return TITULARES;
-    }
+    if (esArtes || esHigiene) return COCURRICULARES;
+    if (esIngles) return TITULARES;
+    if (nombre.includes('franc')) return FRANCES;
+    return TITULARES;
 }
 
 function agregarFilaMaestro(container, materiaId, profesores, profesorId = '', esTitular = false) {
@@ -445,9 +354,7 @@ function agregarFilaMaestro(container, materiaId, profesores, profesorId = '', e
     
     let options = '<option value="">Seleccionar maestro...</option>';
     profesores.forEach(p => {
-        options += `<option value="${p.id}" ${profesorId == p.id ? 'selected' : ''}>
-            ${p.apellido_paterno} ${p.apellido_materno || ''}, ${p.nombre}
-        </option>`;
+        options += `<option value="${p.id}" ${profesorId == p.id ? 'selected' : ''}>${p.apellido_paterno} ${p.apellido_materno || ''}, ${p.nombre}</option>`;
     });
     select.innerHTML = options;
     row.appendChild(select);
@@ -487,11 +394,7 @@ function crearBloqueMateria(materia, profesores) {
     header.className = 'materia-header';
     header.innerHTML = `
         <strong style="font-size:.9rem; color:var(--color-primary);">${materia.nombre}</strong>
-        <span>
-            ${esIngles ? '<span class="badge">Inglés</span>' : ''}
-            ${esArtes ? '<span class="badge">Artes</span>' : ''}
-            ${esHigiene ? '<span class="badge badge--warn">Higiene</span>' : ''}
-        </span>
+        <span>${esIngles ? '<span class="badge">Inglés</span>' : ''}${esArtes ? '<span class="badge">Artes</span>' : ''}${esHigiene ? '<span class="badge badge--warn">Higiene</span>' : ''}</span>
     `;
     div.appendChild(header);
     
@@ -506,16 +409,8 @@ function crearBloqueMateria(materia, profesores) {
     });
     
     fieldsDiv.innerHTML = `
-        <div class="form-group">
-            <label class="form-hint">Campo formativo</label>
-            <select name="materia[${materia.id}][campo_formativo_id]" class="form-control">
-                ${campoOptions}
-            </select>
-        </div>
-        <div class="form-group">
-            <label class="form-hint">Orden en boleta</label>
-            <input type="number" name="materia[${materia.id}][orden]" value="0" min="0" class="form-control">
-        </div>
+        <div class="form-group"><label class="form-hint">Campo formativo</label><select name="materia[${materia.id}][campo_formativo_id]" class="form-control">${campoOptions}</select></div>
+        <div class="form-group"><label class="form-hint">Orden en boleta</label><input type="number" name="materia[${materia.id}][orden]" value="0" min="0" class="form-control"></div>
     `;
     div.appendChild(fieldsDiv);
     
@@ -524,15 +419,8 @@ function crearBloqueMateria(materia, profesores) {
         subcompDiv.className = 'form-group';
         subcompDiv.style.marginBottom = '0.8rem';
         let subcompOptions = '<option value="">Selecciona subcomponente…</option>';
-        SUBCOMPS.forEach(s => {
-            subcompOptions += `<option value="${s.id}">${s.nombre}</option>`;
-        });
-        subcompDiv.innerHTML = `
-            <label class="form-hint">Subcomponente *</label>
-            <select name="materia[${materia.id}][subcomponente_id]" class="form-control">
-                ${subcompOptions}
-            </select>
-        `;
+        SUBCOMPS.forEach(s => { subcompOptions += `<option value="${s.id}">${s.nombre}</option>`; });
+        subcompDiv.innerHTML = `<label class="form-hint">Subcomponente *</label><select name="materia[${materia.id}][subcomponente_id]" class="form-control">${subcompOptions}</select>`;
         div.appendChild(subcompDiv);
     }
     
@@ -540,13 +428,7 @@ function crearBloqueMateria(materia, profesores) {
         const aspectosDiv = document.createElement('div');
         aspectosDiv.className = 'form-group';
         aspectosDiv.style.marginBottom = '0.8rem';
-        aspectosDiv.innerHTML = `
-            <label class="form-hint">Aspectos de Inglés</label>
-            <div class="aspectos-lista-${materia.id}"></div>
-            <button type="button" class="btn btn--sm btn--accent btn-add-aspecto" data-materia="${materia.id}">
-                + Agregar aspecto
-            </button>
-        `;
+        aspectosDiv.innerHTML = `<label class="form-hint">Aspectos de Inglés</label><div class="aspectos-lista-${materia.id}"></div><button type="button" class="btn btn--sm btn--accent btn-add-aspecto" data-materia="${materia.id}">+ Agregar aspecto</button>`;
         div.appendChild(aspectosDiv);
     }
     
@@ -554,20 +436,13 @@ function crearBloqueMateria(materia, profesores) {
     maestrosDiv.style.marginTop = '0.8rem';
     maestrosDiv.style.borderTop = '1px solid var(--color-border)';
     maestrosDiv.style.paddingTop = '0.8rem';
-    maestrosDiv.innerHTML = `
-        <label class="form-hint" style="font-weight:600;">Maestros asignados</label>
-        <div class="maestros-lista-${materia.id}"></div>
-        <button type="button" class="btn-add-maestro" data-materia="${materia.id}">
-            + Agregar otro maestro
-        </button>
-    `;
+    maestrosDiv.innerHTML = `<label class="form-hint" style="font-weight:600;">Maestros asignados</label><div class="maestros-lista-${materia.id}"></div><button type="button" class="btn-add-maestro" data-materia="${materia.id}">+ Agregar otro maestro</button>`;
     div.appendChild(maestrosDiv);
     
     const maestrosLista = div.querySelector(`.maestros-lista-${materia.id}`);
     agregarFilaMaestro(maestrosLista, materia.id, profesores);
     
-    const btnAddMaestro = div.querySelector('.btn-add-maestro');
-    btnAddMaestro.addEventListener('click', () => {
+    div.querySelector('.btn-add-maestro').addEventListener('click', () => {
         agregarFilaMaestro(maestrosLista, materia.id, profesores);
     });
     
@@ -578,10 +453,7 @@ function crearBloqueMateria(materia, profesores) {
             const row = document.createElement('div');
             row.className = 'maestro-row';
             row.style.marginBottom = '0.3rem';
-            row.innerHTML = `
-                <input type="text" name="materia[${materia.id}][aspectos][]" placeholder="ej. Listening" maxlength="100" style="flex:1; padding:.35rem .5rem; border:1px solid #ccd3db; border-radius:4px;">
-                <button type="button" class="btn btn--sm btn--danger" style="margin-top:0;">✕</button>
-            `;
+            row.innerHTML = `<input type="text" name="materia[${materia.id}][aspectos][]" placeholder="ej. Listening" maxlength="100" style="flex:1; padding:.35rem .5rem; border:1px solid #ccd3db; border-radius:4px;"><button type="button" class="btn btn--sm btn--danger" style="margin-top:0;">✕</button>`;
             row.querySelector('button').addEventListener('click', () => row.remove());
             listaAsp.appendChild(row);
         });
@@ -590,47 +462,91 @@ function crearBloqueMateria(materia, profesores) {
     return div;
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    const selSeccion = document.getElementById('seccion');
-    const selGrado = document.getElementById('grado');
-    const selGrupo = document.getElementById('grupo');
+async function cargarGrupos(seccion, grado) {
+    const grupoSelect = document.getElementById('grupo');
+    grupoSelect.innerHTML = '<option value="">Cargando...</option>';
+    grupoSelect.disabled = true;
+    
+    try {
+        const response = await fetch(`asignaciones.php?api=grupos&seccion=${encodeURIComponent(seccion)}&grado=${grado}`);
+        const grupos = await response.json();
+        
+        grupoSelect.innerHTML = '<option value="">Selecciona un grupo...</option>';
+        if (grupos.length === 0) {
+            grupoSelect.innerHTML = '<option value="">No hay grupos configurados</option>';
+        } else {
+            grupos.forEach(grupo => {
+                const option = document.createElement('option');
+                option.value = grupo.nombre;
+                option.textContent = grupo.nombre;
+                grupoSelect.appendChild(option);
+            });
+        }
+        grupoSelect.disabled = false;
+    } catch (error) {
+        console.error('Error cargando grupos:', error);
+        grupoSelect.innerHTML = '<option value="">Error al cargar grupos</option>';
+        grupoSelect.disabled = false;
+    }
+}
+
+function renderizarMaterias() {
+    const seccion = document.getElementById('seccion').value;
+    const grado = document.getElementById('grado').value;
+    const grupo = document.getElementById('grupo').value;
     const wrapMaterias = document.getElementById('wrap-materias');
     const listaMaterias = document.getElementById('lista-materias');
     const btnGuardar = document.getElementById('btn-guardar');
     
-    if (!selSeccion) return;
-    
-    function renderizarMaterias() {
-        const seccion = selSeccion.value;
-        const grado = selGrado.value;
-        const grupo = selGrupo.value;
-        
-        if (!seccion || !grado || !grupo) {
-            wrapMaterias.hidden = true;
-            btnGuardar.hidden = true;
-            listaMaterias.innerHTML = '';
-            return;
-        }
-        
-        const materiasFiltradas = MATERIAS.filter(m => {
-            if (parseInt(m.es_higiene) && seccion !== 'secundaria') return false;
-            return true;
-        });
-        
+    if (!seccion || !grado || !grupo) {
+        wrapMaterias.hidden = true;
+        btnGuardar.hidden = true;
         listaMaterias.innerHTML = '';
-        
-        materiasFiltradas.forEach(materia => {
-            const profesores = getProfesoresPorMateria(materia);
-            const bloque = crearBloqueMateria(materia, profesores);
-            listaMaterias.appendChild(bloque);
-        });
-        
-        wrapMaterias.hidden = false;
-        btnGuardar.hidden = false;
+        return;
     }
     
-    selSeccion.addEventListener('change', renderizarMaterias);
-    selGrado.addEventListener('change', renderizarMaterias);
+    const materiasFiltradas = MATERIAS.filter(m => {
+        if (parseInt(m.es_higiene) && seccion !== 'secundaria') return false;
+        return true;
+    });
+    
+    listaMaterias.innerHTML = '';
+    materiasFiltradas.forEach(materia => {
+        const profesores = getProfesoresPorMateria(materia);
+        listaMaterias.appendChild(crearBloqueMateria(materia, profesores));
+    });
+    
+    wrapMaterias.hidden = false;
+    btnGuardar.hidden = false;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const selSeccion = document.getElementById('seccion');
+    const selGrado = document.getElementById('grado');
+    const selGrupo = document.getElementById('grupo');
+    
+    selSeccion.addEventListener('change', () => {
+        const seccion = selSeccion.value;
+        const grado = selGrado.value;
+        if (seccion && grado) {
+            cargarGrupos(seccion, grado);
+        } else {
+            selGrupo.innerHTML = '<option value="">Primero selecciona sección y grado</option>';
+        }
+        renderizarMaterias();
+    });
+    
+    selGrado.addEventListener('change', () => {
+        const seccion = selSeccion.value;
+        const grado = selGrado.value;
+        if (seccion && grado) {
+            cargarGrupos(seccion, grado);
+        } else {
+            selGrupo.innerHTML = '<option value="">Primero selecciona sección y grado</option>';
+        }
+        renderizarMaterias();
+    });
+    
     selGrupo.addEventListener('change', renderizarMaterias);
 });
 </script>

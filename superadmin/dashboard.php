@@ -94,82 +94,66 @@ include __DIR__ . '/../includes/header.php';
       <p class="nav-card__desc">Abre y cierra periodos de calificación</p>
     </a>
 
+    <!-- NUEVO: Grupos dinámicos -->
+    <a class="nav-card" href="grupos.php">
+      <span class="nav-card__icon" aria-hidden="true">👥</span>
+      <h3 class="nav-card__title">Grupos</h3>
+      <p class="nav-card__desc">Gestiona los grupos por sección (A, B, C, D, etc.)</p>
+    </a>
+
+    <!-- NUEVO: Configuración de aspectos -->
+    <a class="nav-card" href="config_aspectos.php">
+      <span class="nav-card__icon" aria-hidden="true">⚡</span>
+      <h3 class="nav-card__title">Aspectos de evaluación</h3>
+      <p class="nav-card__desc">Configura porcentajes por sección y grado</p>
+    </a>
+
   </nav>
 
   <!-- ========== ASIGNACIONES POR MÓDULO ========== -->
   <h3 style="font-size:0.9rem; color:var(--color-muted); margin: 1rem 0 0.8rem 0;">📖 Asignaciones por módulo</h3>
   <nav class="card-grid" aria-label="Menú de asignaciones">
 
+    <!-- MODIFICADO: Ahora usa el nuevo sistema dinámico -->
     <a class="nav-card" href="grados_materias.php">
         <span class="nav-card__icon" aria-hidden="true">📋</span>
         <h3 class="nav-card__title">Materias por grado</h3>
-        <p class="nav-card__desc">Asigna qué materias tiene cada grado</p>
+        <p class="nav-card__desc">Asigna qué materias tiene cada grado (sistema dinámico)</p>
     </a>
 
-    <a class="nav-card" href="asignaciones_base.php">
-      <span class="nav-card__icon" aria-hidden="true">📘</span>
-      <h3 class="nav-card__title">Materias Base</h3>
-      <p class="nav-card__desc">Español, Matemáticas, Ciencias, Historia, Geografía, FCyE, Vida Saludable, Socioemocional</p>
+    <a class="nav-card" href="materias.php">
+      <span class="nav-card__icon" aria-hidden="true">📖</span>
+      <h3 class="nav-card__title">Materias</h3>
+      <p class="nav-card__desc">Gestiona el catálogo de materias del sistema</p>
     </a>
-
-    <a class="nav-card" href="asignaciones_ingles.php">
-      <span class="nav-card__icon" aria-hidden="true">🌐</span>
-      <h3 class="nav-card__title">Inglés</h3>
-      <p class="nav-card__desc">Listening, Speaking, Writing, Reading, Vocabulary, Grammar, Spelling, Science</p>
-    </a>
-
-    <a class="nav-card" href="asignaciones_artes.php">
-      <span class="nav-card__icon" aria-hidden="true">🎨</span>
-      <h3 class="nav-card__title">Artes y Música</h3>
-      <p class="nav-card__desc">Artes, Danza, Teatro, Dibujo, Música</p>
-    </a>
-
-    <a class="nav-card" href="asignaciones_educacion.php">
-      <span class="nav-card__icon" aria-hidden="true">🏃</span>
-      <h3 class="nav-card__title">Educación Física y Tecnología</h3>
-      <p class="nav-card__desc">Educación Física, Tecnología</p>
-    </a>
-
-    <a class="nav-card" href="asignaciones_frances.php">
-      <span class="nav-card__icon" aria-hidden="true">🇫🇷</span>
-      <h3 class="nav-card__title">Francés</h3>
-      <p class="nav-card__desc">Francés</p>
-    </a>
-
-    <a class="nav-card" href="asignaciones_higiene.php">
-      <span class="nav-card__icon" aria-hidden="true">🧼</span>
-      <h3 class="nav-card__title">Higiene</h3>
-      <p class="nav-card__desc">Solo secundaria</p>
-    </a>
-
-
-<a class="nav-card" href="materias.php">
-    <span class="nav-card__icon" aria-hidden="true">📖</span>
-    <h3 class="nav-card__title">Materias</h3>
-    <p class="nav-card__desc">Gestiona el catálogo de materias del sistema</p>
-</a>
 
   </nav>
 
-
   <!-- ========== GESTIÓN DE CALIFICACIONES Y PERMISOS ========== -->
-<h3 style="font-size:0.9rem; color:var(--color-muted); margin: 1rem 0 0.8rem 0;">🔧 Administración avanzada</h3>
-<nav class="card-grid" aria-label="Menú de administración">
+  <h3 style="font-size:0.9rem; color:var(--color-muted); margin: 1rem 0 0.8rem 0;">🔧 Administración avanzada</h3>
+  <nav class="card-grid" aria-label="Menú de administración">
 
-  <a class="nav-card" href="gestion_calificaciones.php">
-    <span class="nav-card__icon" aria-hidden="true">📊</span>
-    <h3 class="nav-card__title">Gestionar calificaciones</h3>
-    <p class="nav-card__desc">Ver, editar o eliminar calificaciones por grupo</p>
-  </a>
+    <a class="nav-card" href="gestion_calificaciones.php">
+      <span class="nav-card__icon" aria-hidden="true">📊</span>
+      <h3 class="nav-card__title">Gestionar calificaciones</h3>
+      <p class="nav-card__desc">Ver, editar o eliminar calificaciones por grupo</p>
+    </a>
 
-  <a class="nav-card" href="gestion_usuarios_permisos.php">
-    <span class="nav-card__icon" aria-hidden="true">👥</span>
-    <h3 class="nav-card__title">Usuarios y permisos</h3>
-    <p class="nav-card__desc">Asignar roles y permisos a coordinadores</p>
-  </a>
+    <a class="nav-card" href="gestion_usuarios_permisos.php">
+      <span class="nav-card__icon" aria-hidden="true">👥</span>
+      <h3 class="nav-card__title">Usuarios y permisos</h3>
+      <p class="nav-card__desc">Asignar roles y permisos a coordinadores</p>
+    </a>
 
-</nav>
-  
+    <!-- NUEVO: Asignaciones directas (para compatibilidad) -->
+
+    <a class="nav-card" href="asignar_maestros.php">
+    <span class="nav-card__icon" aria-hidden="true">👨‍🏫</span>
+    <h3 class="nav-card__title">Asignar maestros</h3>
+    <p class="nav-card__desc">Asigna maestros a materias por grado y grupo</p>
+</a>
+
+  </nav>
 
   <!-- ========== REPORTES ========== -->
   <h3 style="font-size:0.9rem; color:var(--color-muted); margin: 1rem 0 0.8rem 0;">📊 Reportes</h3>
@@ -181,12 +165,11 @@ include __DIR__ . '/../includes/header.php';
       <p class="nav-card__desc">Consulta calificaciones por grupo</p>
     </a>
 
-  <a class="nav-card" href="documentos_alumnos.php">
-    <span class="nav-card__icon" aria-hidden="true">📄</span>
-    <h3 class="nav-card__title">Documentos de alumnos</h3>
-    <p class="nav-card__desc">Consulta todos los documentos subidos por los padres</p>
-</a>
-
+    <a class="nav-card" href="documentos_alumnos.php">
+      <span class="nav-card__icon" aria-hidden="true">📄</span>
+      <h3 class="nav-card__title">Documentos de alumnos</h3>
+      <p class="nav-card__desc">Consulta todos los documentos subidos por los padres</p>
+    </a>
 
   </nav>
 

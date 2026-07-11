@@ -70,17 +70,25 @@ class AlumnoModel {
         $ap2     = trim($datos['apellido_materno']  ?? '');
         $curp    = strtoupper(trim($datos['curp']   ?? ''));
         $fnac    = trim($datos['fecha_nacimiento']  ?? '');
+        $fing    = trim($datos['fecha_ingreso']     ?? ''); // <--- NUEVO: Fecha de ingreso
         $genero  = trim($datos['genero']            ?? '');
         $grado   = (int)($datos['grado']            ?? 0);
         $grupo   = strtoupper(trim($datos['grupo']  ?? ''));
         $seccion = trim($datos['seccion']           ?? '');
         $padreId = (int)($datos['padre_id']         ?? 0);
         $estatus = trim($datos['estatus']           ?? 'regular');
+        $becaInterna = (float)($datos['beca_interna'] ?? 0);
+        $becaExterna = (float)($datos['beca_externa'] ?? 0);
 
         if ($nombre === '') return ['error' => 'El nombre del alumno es obligatorio'];
         if ($ap1 === '') return ['error' => 'El apellido paterno es obligatorio'];
         if ($fnac === '') return ['error' => 'La fecha de nacimiento es obligatoria'];
         if ($padreId <= 0) return ['error' => 'Debes seleccionar un padre/tutor'];
+
+        // Si no viene fecha_ingreso, usar la fecha actual
+        if ($fing === '') {
+            $fing = date('Y-m-d');
+        }
 
         $generosValidos   = ['masculino', 'femenino', 'otro'];
         $gruposValidos    = ['A','B','C','D'];
@@ -116,20 +124,25 @@ class AlumnoModel {
             $userId = $this->userModel->crearUserLogin($username, 3);
             if (!$userId) throw new Exception('Error al crear usuario de login');
 
+            // ============================================================
+            // CONSULTA CORREGIDA: Se agregó fecha_ingreso y becas
+            // ============================================================
             $stmt = $this->db->prepare("
                 INSERT INTO alumnos
                     (user_id, matricula, nombre, apellido_paterno, apellido_materno,
-                     curp, fecha_nacimiento, genero, grado, grupo, seccion, estatus)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     curp, fecha_nacimiento, fecha_ingreso, genero, grado, grupo, seccion, estatus,
+                     beca_interna, beca_externa)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             $ap2OrNull  = $ap2  !== '' ? $ap2  : null;
             $curpOrNull = $curp !== '' ? $curp : null;
 
             $stmt->bind_param(
-                'isssssssisss',
+                'issssssssisssdd',
                 $userId, $matricula, $nombre, $ap1, $ap2OrNull,
-                $curpOrNull, $fnac, $genero, $grado, $grupo, $seccion, $estatus
+                $curpOrNull, $fnac, $fing, $genero, $grado, $grupo, $seccion, $estatus,
+                $becaInterna, $becaExterna
             );
 
             if (!$stmt->execute()) throw new Exception('Error al guardar alumno: ' . $stmt->error);

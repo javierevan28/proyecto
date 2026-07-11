@@ -38,6 +38,115 @@ $alumno           = $boleta['alumno']           ?? [];
 $porCampo         = $boleta['porCampo']         ?? [];
 $periodosAbiertos = $boleta['periodosAbiertos'] ?? [];
 
+// ============================================================
+// AGRUPAR MATERIAS DE ARTES
+// ============================================================
+// 4 = Artes | 27 = Música | 28 = Danza | 29 = Teatro
+//
+// Reglas de qué materias de artes se promedian:
+//  - Primaria 1° a 4°: Artes + Danza + Música
+//  - Primaria 5° y 6°: Artes + Música + Teatro
+//  - Secundaria (todos los grados): Artes + Teatro
+function agruparArtes($materias, $grado, $seccion) {
+    $artesMaterias = [];
+    $otrasMaterias = [];
+
+    // IDs de materias de artes
+    $artesIds = [4, 27, 28, 29];
+
+    if ($seccion === 'secundaria') {
+        $artesIdsAplican = [4, 29];
+    } elseif ($grado >= 5) {
+        $artesIdsAplican = [4, 27, 29];
+    } else {
+        $artesIdsAplican = [4, 27, 28];
+    }
+
+    foreach ($materias as $m) {
+        $materiaId = (int)($m['materia_id'] ?? 0);
+
+        // Verificar si es una materia de artes que aplica
+        if (in_array($materiaId, $artesIds) && in_array($materiaId, $artesIdsAplican)) {
+            $artesMaterias[] = $m;
+        } else {
+            $otrasMaterias[] = $m;
+        }
+    }
+
+    // Si no hay materias de artes, devolver las originales
+    if (empty($artesMaterias)) {
+        return $materias;
+    }
+
+    // Crear la materia "Artes" con el promedio de todas las artes
+    $promedioArtes = [
+        'materia_nombre' => 'Artes',
+        'materia_id' => 4,
+        'es_artes' => 1,
+        'es_ingles' => 0,
+        'asignacion_id' => 0,
+        'calificaciones' => [],
+        'trimestres' => [1 => null, 2 => null, 3 => null],
+    ];
+
+    // Calcular promedio por período (1-6)
+    for ($p = 1; $p <= 6; $p++) {
+        $suma = 0;
+        $count = 0;
+        foreach ($artesMaterias as $am) {
+            $cal = $am['calificaciones'][$p] ?? null;
+            if ($cal !== null) {
+                $suma += $cal;
+                $count++;
+            }
+        }
+        $promedioArtes['calificaciones'][$p] = $count > 0 ? round($suma / $count, 1) : null;
+    }
+
+    // Calcular trimestres
+    for ($t = 1; $t <= 3; $t++) {
+        $suma = 0;
+        $count = 0;
+        foreach ($artesMaterias as $am) {
+            $prom = $am['trimestres'][$t] ?? null;
+            if ($prom !== null) {
+                $suma += $prom;
+                $count++;
+            }
+        }
+        $promedioArtes['trimestres'][$t] = $count > 0 ? round($suma / $count, 1) : null;
+    }
+
+    // Agregar la materia Artes al inicio de las otras materias
+    array_unshift($otrasMaterias, $promedioArtes);
+
+    return $otrasMaterias;
+}
+
+// ============================================================
+// APLICAR AGRUPACIÓN EN TODOS LOS CAMPOS FORMATIVOS
+// ============================================================
+$gradoAlumno   = (int)($alumno['grado'] ?? 1);
+$seccionAlumno = $alumno['seccion'] ?? 'primaria';
+
+// Recorrer TODOS los campos formativos, no solo uno
+foreach ($porCampo as $campo => $materias) {
+    // Verificar si hay materias de artes en este campo
+    $hayArtes = false;
+    foreach ($materias as $m) {
+        $materiaId = (int)($m['materia_id'] ?? 0);
+        if (in_array($materiaId, [4, 27, 28, 29])) {
+            $hayArtes = true;
+            break;
+        }
+    }
+
+    // Si hay artes en este campo, aplicar agrupación
+    if ($hayArtes) {
+        $porCampo[$campo] = agruparArtes($materias, $gradoAlumno, $seccionAlumno);
+    }
+}
+
 // ORDEN ESPECÍFICO DE CAMPOS FORMATIVOS
 $ordenCampos = [
     'LENGUAJES',
@@ -53,7 +162,6 @@ foreach ($ordenCampos as $campo) {
         $porCampoFinal[$campo] = $porCampo[$campo];
     }
 }
-// Cualquier campo que no esté en la lista lo agrega al final
 foreach ($porCampo as $campo => $materias) {
     if (!isset($porCampoFinal[$campo])) {
         $porCampoFinal[$campo] = $materias;
@@ -124,9 +232,7 @@ include __DIR__ . '/../includes/header.php';
         <tbody>
           <?php foreach ($porCampo as $campo => $materias): ?>
             <?php
-              // Filtrar inglés individuales — solo mostrar la fila resumen 'Inglés'
               $materiasVista = array_values(array_filter($materias, function($m) {
-                  // Excluir las submaterias individuales de inglés (es_ingles=1 y asignacion_id > 0)
                   return !((int)($m['es_ingles'] ?? 0) === 1 && (int)($m['asignacion_id'] ?? 0) > 0);
               }));
               $totalFilas = count($materiasVista);

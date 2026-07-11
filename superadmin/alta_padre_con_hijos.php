@@ -16,9 +16,7 @@ $resultadoPadre = null;
 $resultadoAlumnos = [];
 $errorAlumnos = [];
 
-// Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // 1. Registrar al padre
     $datosPadre = [
         'apellido_paterno' => $_POST['padre_apellido_paterno'] ?? '',
         'apellido_materno' => $_POST['padre_apellido_materno'] ?? '',
@@ -32,22 +30,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $resultadoPadre = $padreModel->crear($datosPadre);
     
-    // 2. Si el padre se registró correctamente, registrar los hijos
     if (isset($resultadoPadre['success'])) {
         $padreId = $resultadoPadre['padre_id'];
         $numHijos = (int)($_POST['num_hijos'] ?? 0);
         
         for ($i = 1; $i <= $numHijos; $i++) {
             if (!empty($_POST["hijo_nombre_$i"])) {
+                // Validar y sanitizar fecha de nacimiento
+                $fechaNacimiento = $_POST["hijo_fecha_nacimiento_$i"] ?? '';
+                if (!empty($fechaNacimiento)) {
+                    $fechaParts = explode('-', $fechaNacimiento);
+                    if (count($fechaParts) === 3 && checkdate((int)$fechaParts[1], (int)$fechaParts[2], (int)$fechaParts[0])) {
+                        // Fecha válida
+                    } else {
+                        $fechaNacimiento = date('Y-m-d');
+                    }
+                } else {
+                    $fechaNacimiento = date('Y-m-d');
+                }
+                
+                // Validar y sanitizar fecha de ingreso
+                $fechaIngreso = trim($_POST["hijo_fecha_ingreso_$i"] ?? '');
+                if (!empty($fechaIngreso)) {
+                    $fechaParts = explode('-', $fechaIngreso);
+                    if (count($fechaParts) === 3 && checkdate((int)$fechaParts[1], (int)$fechaParts[2], (int)$fechaParts[0])) {
+                        // Fecha válida
+                    } else {
+                        $fechaIngreso = date('Y-m-d');
+                    }
+                } else {
+                    $fechaIngreso = date('Y-m-d');
+                }
+                
                 $datosAlumno = [
                     'apellido_paterno' => $_POST["hijo_apellido_paterno_$i"] ?? '',
                     'apellido_materno' => $_POST["hijo_apellido_materno_$i"] ?? '',
                     'nombre' => $_POST["hijo_nombre_$i"] ?? '',
                     'curp' => $_POST["hijo_curp_$i"] ?? '',
-                    'fecha_nacimiento' => $_POST["hijo_fecha_nacimiento_$i"] ?? '',
-                    'fecha_ingreso' => $_POST["hijo_fecha_ingreso_$i"] ?? date('Y-m-d'),
+                    'fecha_nacimiento' => $fechaNacimiento,
+                    'fecha_ingreso' => $fechaIngreso,
                     'genero' => $_POST["hijo_genero_$i"] ?? '',
-                    'grado' => $_POST["hijo_grado_$i"] ?? 0,
+                    'grado' => (int)($_POST["hijo_grado_$i"] ?? 0),
                     'grupo' => $_POST["hijo_grupo_$i"] ?? '',
                     'seccion' => $_POST["hijo_seccion_$i"] ?? '',
                     'estatus' => $_POST["hijo_estatus_$i"] ?? 'regular',
@@ -154,7 +177,6 @@ include __DIR__ . '/../includes/header.php';
             Los hijos se vincularán automáticamente al padre.
         </p>
 
-        <!-- Mensajes de éxito -->
         <?php if ($resultadoPadre && isset($resultadoPadre['success'])): ?>
             <div class="alert alert--success" role="status">
                 <strong>✅ Padre registrado correctamente</strong><br>
@@ -184,8 +206,7 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             <?php endif; ?>
             
-            <!-- Botones de acción después del registro -->
-            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+            <div style="display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap;">
                 <a href="alta_padre_con_hijos.php" class="btn btn--accent">➕ Registrar otro</a>
                 <a href="lista_padres.php" class="btn">📋 Ver padres registrados</a>
                 <a href="dashboard.php" class="btn" style="background: var(--color-muted);">← Volver al dashboard</a>
@@ -197,9 +218,7 @@ include __DIR__ . '/../includes/header.php';
             </div>
         <?php endif; ?>
 
-        <!-- Formulario combinado -->
         <form method="POST" id="formPadreHijos" novalidate>
-            <!-- ========== DATOS DEL PADRE ========== -->
             <div style="background: #f0f4f8; padding: 1rem; border-radius: var(--radius); margin-bottom: 1.5rem;">
                 <h3 style="font-size: 1rem; color: var(--color-primary); margin-bottom: 1rem;">👨‍👩 Datos del padre / tutor</h3>
                 
@@ -265,7 +284,6 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             
-            <!-- ========== HIJOS (CONTENEDOR DINÁMICO) ========== -->
             <div>
                 <h3 style="font-size: 1rem; color: var(--color-primary); margin-bottom: 0.5rem;">👧👦 Hijos</h3>
                 <p class="form-hint" style="margin-bottom: 1rem;">
@@ -273,8 +291,7 @@ include __DIR__ . '/../includes/header.php';
                     Todos se vincularán automáticamente al padre.
                 </p>
                 
-                <!-- Selector de número de hijos -->
-                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
                     <label for="num_hijos" style="font-weight: 500;">Número de hijos:</label>
                     <select id="num_hijos" name="num_hijos" style="width: auto; padding: 0.4rem 1rem;">
                         <option value="0">0 - Sin hijos</option>
@@ -287,7 +304,6 @@ include __DIR__ . '/../includes/header.php';
                     </select>
                 </div>
                 
-                <!-- Contenedor donde se generarán los formularios de hijos -->
                 <div id="hijos-container"></div>
                 
                 <button type="button" class="btn-add-hijo" id="btnAddHijo" style="display: none;">
@@ -305,7 +321,6 @@ include __DIR__ . '/../includes/header.php';
 </main>
 
 <script>
-// Configuración de opciones para selects
 const SECCIONES = [
     { value: 'maternal', label: 'Maternal' },
     { value: 'preescolar', label: 'Preescolar' },
@@ -388,13 +403,16 @@ function actualizarTodosLosBadges() {
 }
 
 function generarHijoHTML(index, datos = null) {
+    const fechaActual = new Date().toISOString().split('T')[0];
+    
+    // Si no hay datos, usar valores por defecto
     const defaultData = datos || {
         apellido_paterno: '',
         apellido_materno: '',
         nombre: '',
         curp: '',
-        fecha_nacimiento: '',
-        fecha_ingreso: new Date().toISOString().split('T')[0],
+        fecha_nacimiento: fechaActual,
+        fecha_ingreso: fechaActual,
         genero: '',
         grado: '',
         grupo: '',
@@ -403,6 +421,10 @@ function generarHijoHTML(index, datos = null) {
         beca_interna: '0',
         beca_externa: '0'
     };
+    
+    // Asegurar que las fechas tengan valor
+    const fechaNacimiento = defaultData.fecha_nacimiento || fechaActual;
+    const fechaIngreso = defaultData.fecha_ingreso || fechaActual;
     
     let gradoOptions = '<option value="">Selecciona…</option>';
     GRADOS.forEach(g => {
@@ -477,16 +499,15 @@ function generarHijoHTML(index, datos = null) {
                     <label for="hijo_fecha_nacimiento_${index}">Fecha de nacimiento *</label>
                     <input type="date" id="hijo_fecha_nacimiento_${index}" 
                            name="hijo_fecha_nacimiento_${index}"
-                           value="${defaultData.fecha_nacimiento}"
+                           value="${fechaNacimiento}"
                            required>
                 </div>
                 
                 <div class="form-group">
-                    <label for="hijo_fecha_ingreso_${index}">Fecha de ingreso *</label>
+                    <label for="hijo_fecha_ingreso_${index}">Fecha de ingreso</label>
                     <input type="date" id="hijo_fecha_ingreso_${index}" 
                            name="hijo_fecha_ingreso_${index}"
-                           value="${defaultData.fecha_ingreso}"
-                           required>
+                           value="${fechaIngreso}">
                 </div>
                 
                 <div class="form-group">
@@ -551,20 +572,24 @@ function generarHijoHTML(index, datos = null) {
 function actualizarHijos(numHijos) {
     const container = document.getElementById('hijos-container');
     const numActual = document.getElementById('num_hijos_actual');
+    const fechaActual = new Date().toISOString().split('T')[0];
     
     if (!container) return;
     
+    // Preservar datos existentes
     const datosExistentes = {};
     for (let i = 1; i <= 6; i++) {
         const card = document.querySelector(`.hijo-card[data-hijo-index="${i}"]`);
         if (card) {
+            const fechaIngreso = document.getElementById(`hijo_fecha_ingreso_${i}`)?.value || fechaActual;
+            const fechaNacimiento = document.getElementById(`hijo_fecha_nacimiento_${i}`)?.value || fechaActual;
             datosExistentes[i] = {
                 apellido_paterno: document.getElementById(`hijo_apellido_paterno_${i}`)?.value || '',
                 apellido_materno: document.getElementById(`hijo_apellido_materno_${i}`)?.value || '',
                 nombre: document.getElementById(`hijo_nombre_${i}`)?.value || '',
                 curp: document.getElementById(`hijo_curp_${i}`)?.value || '',
-                fecha_nacimiento: document.getElementById(`hijo_fecha_nacimiento_${i}`)?.value || '',
-                fecha_ingreso: document.getElementById(`hijo_fecha_ingreso_${i}`)?.value || new Date().toISOString().split('T')[0],
+                fecha_nacimiento: fechaNacimiento,
+                fecha_ingreso: fechaIngreso,
                 genero: document.getElementById(`hijo_genero_${i}`)?.value || '',
                 grado: document.getElementById(`hijo_grado_${i}`)?.value || '',
                 grupo: document.getElementById(`hijo_grupo_${i}`)?.value || '',
@@ -586,6 +611,12 @@ function actualizarHijos(numHijos) {
         numActual.value = numHijos;
     }
     
+    // Mostrar/ocultar botón de agregar
+    const btnAdd = document.getElementById('btnAddHijo');
+    if (btnAdd) {
+        btnAdd.style.display = numHijos < 6 ? 'block' : 'none';
+    }
+    
     setTimeout(actualizarTodosLosBadges, 50);
 }
 
@@ -595,16 +626,19 @@ function removerHijo(index) {
     
     let numActual = parseInt(select.value);
     if (numActual > 0 && index <= numActual) {
+        // Recolectar datos de todos los hijos excepto el que se elimina
         const nuevosValores = [];
         for (let i = 1; i <= numActual; i++) {
             if (i !== index) {
-                const datos = {
+                const fechaIngreso = document.getElementById(`hijo_fecha_ingreso_${i}`)?.value || new Date().toISOString().split('T')[0];
+                const fechaNacimiento = document.getElementById(`hijo_fecha_nacimiento_${i}`)?.value || new Date().toISOString().split('T')[0];
+                nuevosValores.push({
                     apellido_paterno: document.getElementById(`hijo_apellido_paterno_${i}`)?.value || '',
                     apellido_materno: document.getElementById(`hijo_apellido_materno_${i}`)?.value || '',
                     nombre: document.getElementById(`hijo_nombre_${i}`)?.value || '',
                     curp: document.getElementById(`hijo_curp_${i}`)?.value || '',
-                    fecha_nacimiento: document.getElementById(`hijo_fecha_nacimiento_${i}`)?.value || '',
-                    fecha_ingreso: document.getElementById(`hijo_fecha_ingreso_${i}`)?.value || new Date().toISOString().split('T')[0],
+                    fecha_nacimiento: fechaNacimiento,
+                    fecha_ingreso: fechaIngreso,
                     genero: document.getElementById(`hijo_genero_${i}`)?.value || '',
                     grado: document.getElementById(`hijo_grado_${i}`)?.value || '',
                     grupo: document.getElementById(`hijo_grupo_${i}`)?.value || '',
@@ -612,8 +646,7 @@ function removerHijo(index) {
                     estatus: document.getElementById(`hijo_estatus_${i}`)?.value || 'regular',
                     beca_interna: document.getElementById(`hijo_beca_interna_${i}`)?.value || '0',
                     beca_externa: document.getElementById(`hijo_beca_externa_${i}`)?.value || '0'
-                };
-                nuevosValores.push(datos);
+                });
             }
         }
         
@@ -627,6 +660,12 @@ function removerHijo(index) {
         container.innerHTML = html;
         
         document.getElementById('num_hijos_actual').value = nuevosValores.length;
+        
+        // Actualizar botón agregar
+        const btnAdd = document.getElementById('btnAddHijo');
+        if (btnAdd) {
+            btnAdd.style.display = nuevosValores.length < 6 ? 'block' : 'none';
+        }
         
         setTimeout(actualizarTodosLosBadges, 50);
     }
@@ -658,6 +697,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Actualizar badges al cargar
+    setTimeout(actualizarTodosLosBadges, 100);
+    
+    // Delegación de eventos para cambios en selects
     document.addEventListener('change', function(e) {
         if (e.target && e.target.id && e.target.id.startsWith('hijo_seccion_')) {
             const match = e.target.id.match(/hijo_seccion_(\d+)/);
@@ -669,6 +712,54 @@ document.addEventListener('DOMContentLoaded', function() {
             const match = e.target.id.match(/hijo_estatus_(\d+)/);
             if (match) {
                 actualizarBadgeEstatus(parseInt(match[1]), e.target.value);
+            }
+        }
+    });
+    
+    // Validación antes de enviar
+    document.getElementById('formPadreHijos').addEventListener('submit', function(e) {
+        const numHijos = parseInt(document.getElementById('num_hijos').value);
+        let hasError = false;
+        
+        for (let i = 1; i <= numHijos; i++) {
+            const nombre = document.getElementById(`hijo_nombre_${i}`);
+            if (nombre && !nombre.value.trim()) {
+                alert(`El campo "Nombre(s)" del hijo #${i} es obligatorio.`);
+                e.preventDefault();
+                hasError = true;
+                break;
+            }
+            
+            const fechaNac = document.getElementById(`hijo_fecha_nacimiento_${i}`);
+            if (fechaNac && !fechaNac.value) {
+                alert(`La "Fecha de nacimiento" del hijo #${i} es obligatoria.`);
+                e.preventDefault();
+                hasError = true;
+                break;
+            }
+            
+            const seccion = document.getElementById(`hijo_seccion_${i}`);
+            if (seccion && !seccion.value) {
+                alert(`La "Sección" del hijo #${i} es obligatoria.`);
+                e.preventDefault();
+                hasError = true;
+                break;
+            }
+            
+            const grado = document.getElementById(`hijo_grado_${i}`);
+            if (grado && !grado.value) {
+                alert(`El "Grado" del hijo #${i} es obligatorio.`);
+                e.preventDefault();
+                hasError = true;
+                break;
+            }
+            
+            const grupo = document.getElementById(`hijo_grupo_${i}`);
+            if (grupo && !grupo.value) {
+                alert(`El "Grupo" del hijo #${i} es obligatorio.`);
+                e.preventDefault();
+                hasError = true;
+                break;
             }
         }
     });

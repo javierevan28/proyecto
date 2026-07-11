@@ -35,10 +35,10 @@ class BoletaModel {
             $periodosAbiertos[] = (int)$row['periodo'];
         }
 
-        // CONSULTA CORREGIDA: usa el campo_formativo de la materia si la asignación no tiene
         $stmtAsig = $this->db->prepare("
             SELECT a.id AS asignacion_id, a.orden,
                    m.nombre AS materia_nombre,
+                   m.id AS materia_id,
                    m.es_ingles, m.es_artes, m.es_higiene,
                    m.es_disciplina, m.es_ausencias,
                    COALESCE(cf.id, cf2.id) AS campo_id,
@@ -69,7 +69,9 @@ class BoletaModel {
             }
         }
 
-        // Calificaciones materias normales
+        // ============================================================
+        // MATERIAS BASE (NO inglés, NO artes)
+        // ============================================================
         $materiasConCals = [];
         foreach ($materiasBase as $asig) {
             $asigId = (int)$asig['asignacion_id'];
@@ -86,7 +88,9 @@ class BoletaModel {
             $materiasConCals[] = $asig;
         }
 
-        // Promedio de INGLÉS
+        // ============================================================
+        // PROMEDIO DE INGLÉS
+        // ============================================================
         $promedioIngles = array_fill(1, 6, null);
         if (!empty($materiasIngles)) {
             for ($p = 1; $p <= 6; $p++) {
@@ -103,7 +107,9 @@ class BoletaModel {
             }
         }
 
-        // Promedio de ARTES
+        // ============================================================
+        // PROMEDIO DE ARTES
+        // ============================================================
         $promedioArtes = array_fill(1, 6, null);
         if (!empty($materiasArtes)) {
             for ($p = 1; $p <= 6; $p++) {
@@ -116,19 +122,23 @@ class BoletaModel {
                         $count++;
                     }
                 }
-                $promedioArtes[$p] = $count > 0 ? round($suma / $count) : null;
+                $promedioArtes[$p] = $count > 0 ? round($suma / $count, 1) : null;
             }
         }
 
-        // Armar $porCampo
+        // ============================================================
+        // ARMAR $porCampo - SOLO MATERIAS BASE + INGLES + ARTES (como promedio)
+        // ============================================================
         $porCampo = [];
+        
+        // 1. Materias base (NO inglés, NO artes)
         foreach ($materiasConCals as $asig) {
             $campo = $asig['campo_nombre'];
             if (!isset($porCampo[$campo])) $porCampo[$campo] = [];
             $porCampo[$campo][] = $asig;
         }
 
-        // Inglés en LENGUAJES
+        // 2. Inglés - UNA SOLA FILA en LENGUAJES
         if (!empty($materiasIngles)) {
             $trimIngles = [];
             for ($t = 1; $t <= 3; $t++) {
@@ -138,6 +148,7 @@ class BoletaModel {
             $porCampo['LENGUAJES'][] = [
                 'asignacion_id'  => 0,
                 'materia_nombre' => 'Inglés',
+                'materia_id'     => 0,
                 'es_ingles'      => 1,
                 'es_artes'       => 0,
                 'campo_nombre'   => 'LENGUAJES',
@@ -146,7 +157,7 @@ class BoletaModel {
             ];
         }
 
-        // Artes en LENGUAJES
+        // 3. Artes - UNA SOLA FILA en LENGUAJES
         if (!empty($materiasArtes)) {
             $trimArtes = [];
             for ($t = 1; $t <= 3; $t++) {
@@ -156,6 +167,7 @@ class BoletaModel {
             $porCampo['LENGUAJES'][] = [
                 'asignacion_id'  => 0,
                 'materia_nombre' => 'Artes',
+                'materia_id'     => 4,
                 'es_ingles'      => 0,
                 'es_artes'       => 1,
                 'campo_nombre'   => 'LENGUAJES',
@@ -182,11 +194,11 @@ class BoletaModel {
         $stmt->bind_param('iii', $alumnoId, $asignacionId, $periodo);
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
-        return ($res && $res['promedio'] !== null) ? (float)round($res['promedio']) : null;
+        return ($res && $res['promedio'] !== null) ? (float)round($res['promedio'], 1) : null;
     }
 
     private function calcTrimestre(?float $p1, ?float $p2): ?float {
-        if ($p1 !== null && $p2 !== null) return round(($p1 + $p2) / 2);
+        if ($p1 !== null && $p2 !== null) return round(($p1 + $p2) / 2, 1);
         if ($p1 !== null) return $p1;
         if ($p2 !== null) return $p2;
         return null;

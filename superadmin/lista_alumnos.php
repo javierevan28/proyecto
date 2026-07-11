@@ -99,6 +99,7 @@ $sql = "
         a.grupo,
         a.beca_interna,
         a.beca_externa,
+        a.activo,
         p.nombre as padre_nombre,
         p.apellido_paterno as padre_apellido_paterno,
         p.apellido_materno as padre_apellido_materno,
@@ -190,7 +191,7 @@ if (!empty($params)) {
 $stmt->execute();
 $alumnos = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-$estatusList = ['nuevo_ingreso' => '🆕 Nuevo Ingreso', 'reinscripcion' => '🔄 Reinscripción', 'regular' => 'Regular', 'baja' => '❌ Baja'];
+$estatusList = ['nuevo_ingreso' => '🆕 Nuevo Ingreso', 'reinscripcion' => '🔄 Reinscripción', 'regular' => 'Regular', 'baja' => 'Baja'];
 $generosList = ['masculino' => 'Masculino', 'femenino' => 'Femenino', 'otro' => 'Otro'];
 $seccionesList = ['maternal' => 'Maternal', 'preescolar' => 'Preescolar', 'primaria' => 'Primaria', 'secundaria' => 'Secundaria'];
 $gradosList = [1, 2, 3, 4, 5, 6];
@@ -451,6 +452,239 @@ include __DIR__ . '/../includes/header.php';
     .btn-clear:hover {
         background: #fecaca;
     }
+
+    .action-buttons {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .btn-action {
+        padding: 4px 8px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.7rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        font-family: var(--font);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+    }
+
+    .btn-edit {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .btn-edit:hover {
+        background: #bfdbfe;
+    }
+
+    .btn-deactivate {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .btn-deactivate:hover {
+        background: #fecaca;
+    }
+
+    .btn-activate {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .btn-activate:hover {
+        background: #a7f3d0;
+    }
+
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal-overlay.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 700px;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        position: relative;
+    }
+
+    .modal-close {
+        position: absolute;
+        top: 12px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #64748b;
+        transition: color 0.2s;
+    }
+
+    .modal-close:hover {
+        color: #0f172a;
+    }
+
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: var(--color-primary);
+    }
+
+    .modal-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .modal-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .modal-field.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .modal-field label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+
+    .modal-field input,
+    .modal-field select {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        font-size: 0.9rem;
+        font-family: var(--font);
+        background: var(--color-surface);
+        transition: border-color 0.2s;
+    }
+
+    .modal-field input:focus,
+    .modal-field select:focus {
+        outline: none;
+        border-color: var(--color-accent);
+        box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        justify-content: flex-end;
+        border-top: 1px solid var(--color-border);
+        padding-top: 1.5rem;
+    }
+
+    .btn-modal-save {
+        background: var(--color-accent);
+        color: white;
+        padding: 0.6rem 1.5rem;
+        border: none;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-weight: 500;
+        font-family: var(--font);
+        transition: background 0.2s;
+    }
+
+    .btn-modal-save:hover {
+        background: #2563eb;
+    }
+
+    .btn-modal-cancel {
+        background: #e2e8f0;
+        color: #475569;
+        padding: 0.6rem 1.5rem;
+        border: none;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-weight: 500;
+        font-family: var(--font);
+        transition: background 0.2s;
+    }
+
+    .btn-modal-cancel:hover {
+        background: #cbd5e1;
+    }
+
+    .btn-modal-danger {
+        background: #dc2626;
+        color: white;
+        padding: 0.6rem 1.5rem;
+        border: none;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-weight: 500;
+        font-family: var(--font);
+        transition: background 0.2s;
+    }
+
+    .btn-modal-danger:hover {
+        background: #b91c1c;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    .status-active {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .status-inactive {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .telefono-link {
+        color: var(--color-accent);
+        text-decoration: none;
+        font-size: 0.75rem;
+    }
+    .telefono-link:hover {
+        text-decoration: underline;
+    }
+
+    @media (max-width: 600px) {
+        .modal-grid {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
 <main class="container">
@@ -463,7 +697,7 @@ include __DIR__ . '/../includes/header.php';
                 <input type="text" 
                        id="busquedaInput"
                        value="<?= htmlspecialchars($filters['busqueda']) ?>"
-                       placeholder="🔍 Buscar por nombre, apellido o matrícula..."
+                       placeholder="🔍 Buscar por nombre, apellido, matrícula o padre..."
                        autocomplete="off">
                 <button type="button" onclick="aplicarFiltros()">Buscar</button>
                 
@@ -578,21 +812,23 @@ include __DIR__ . '/../includes/header.php';
                         <th>Sección</th>
                         <th>Grado</th>
                         <th>Grupo</th>
-                        <th>Fecha nac.</th>
-                        <th>Fecha ingreso</th>
-                        <th>CURP</th>
                         <th>Estatus</th>
-                        <th>Padre/Tutor</th>
-                        <th>Correo</th>
-                        <th>Teléfono</th>
                         <th>Beca interna</th>
                         <th>Beca externa</th>
+                        <!-- <--- NUEVAS COLUMNAS -->
+                        <th>F. Nacimiento</th>
+                        <th>F. Ingreso</th>
+                        <th>CURP</th>
+                        <th>Estado</th>
+                        <th>Padre/Tutor</th>
+                        <th>Teléfono</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($alumnos)): ?>
                         <tr class="empty-row">
-                            <td colspan="17">
+                            <td colspan="19">
                                 📭 No se encontraron alumnos<br>
                                 <small>Prueba con otros criterios de búsqueda o <a href="lista_alumnos.php">limpia los filtros</a></small>
                             </td>
@@ -611,13 +847,18 @@ include __DIR__ . '/../includes/header.php';
                                 'nuevo_ingreso' => '🆕 Nuevo Ingreso',
                                 'reinscripcion' => '🔄 Reinscripción',
                                 'regular' => 'Regular',
-                                'baja' => '❌ Baja',
+                                'baja' => 'Baja',
                                 default => ucfirst($alumno['estatus'] ?? 'regular')
                             };
                             $generoClass = 'badge-genero badge-' . ($alumno['genero'] ?? 'otro');
                             $seccionClass = 'badge-seccion badge-' . ($alumno['seccion'] ?? 'primaria');
                             $seccionTexto = ucfirst($alumno['seccion'] ?? 'Primaria');
                             $nombrePadre = trim(($alumno['padre_apellido_paterno'] ?? '') . ' ' . ($alumno['padre_apellido_materno'] ?? '') . ' ' . ($alumno['padre_nombre'] ?? ''));
+                            if (empty($nombrePadre)) {
+                                $nombrePadre = '—';
+                            }
+                            $telefonoPadre = $alumno['padre_telefono'] ?? '';
+                            $isActive = (int)($alumno['activo'] ?? 1) === 1;
                             ?>
                             <tr class="clickable-row" onclick="window.location.href='documentos_alumnos.php?alumno_id=<?= $alumno['id'] ?>'">
                                 <td><strong><?= htmlspecialchars($alumno['matricula'] ?? '—') ?></strong></td>
@@ -628,15 +869,44 @@ include __DIR__ . '/../includes/header.php';
                                 <td><span class="<?= $seccionClass ?>"><?= $seccionTexto ?></span></td>
                                 <td><?= $alumno['grado'] ?>°</td>
                                 <td><?= $alumno['grupo'] ?></td>
-                                <td><?= htmlspecialchars($alumno['fecha_nacimiento']) ?></td>
-                                <td><?= htmlspecialchars($alumno['fecha_ingreso'] ?? '—') ?></td>
-                                <td><small><?= htmlspecialchars($alumno['curp'] ?? '—') ?></small></td>
                                 <td><span class="badge <?= $estatusClass ?>"><?= $estatusTexto ?></span></td>
-                                <td><?= htmlspecialchars($nombrePadre ?: '—') ?></td>
-                                <td><small><?= htmlspecialchars($alumno['padre_correo'] ?? '—') ?></small></td>
-                                <td><?= htmlspecialchars($alumno['padre_telefono'] ?? '—') ?></td>
                                 <td class="beca-value">$<?= number_format($alumno['beca_interna'] ?? 0, 2) ?></td>
                                 <td class="beca-value">$<?= number_format($alumno['beca_externa'] ?? 0, 2) ?></td>
+                                <!-- <--- NUEVAS COLUMNAS: F. Nacimiento, F. Ingreso, CURP -->
+                                <td><?= date('d/m/Y', strtotime($alumno['fecha_nacimiento'])) ?></td>
+                                <td><?= date('d/m/Y', strtotime($alumno['fecha_ingreso'])) ?></td>
+                                <td><?= htmlspecialchars($alumno['curp'] ?? '—') ?></td>
+                                <td>
+                                    <span class="status-badge <?= $isActive ? 'status-active' : 'status-inactive' ?>">
+                                        <?= $isActive ? 'Activo' : 'Inactivo' ?>
+                                    </span>
+                                </td>
+                                <td><?= htmlspecialchars($nombrePadre) ?></td>
+                                <td>
+                                    <?php if (!empty($telefonoPadre)): ?>
+                                        <a href="tel:<?= htmlspecialchars($telefonoPadre) ?>" class="telefono-link">
+                                            📞 <?= htmlspecialchars($telefonoPadre) ?>
+                                        </a>
+                                    <?php else: ?>
+                                        <span style="color: var(--color-muted);">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <div class="action-buttons" onclick="event.stopPropagation();">
+                                        <button class="btn-action btn-edit" onclick="editarAlumno(<?= $alumno['id'] ?>)">
+                                            Editar
+                                        </button>
+                                        <?php if ($isActive): ?>
+                                            <button class="btn-action btn-deactivate" onclick="darDeBaja(<?= $alumno['id'] ?>, '<?= htmlspecialchars($alumno['nombre'] . ' ' . $alumno['apellido_paterno']) ?>')">
+                                                Baja
+                                            </button>
+                                        <?php else: ?>
+                                            <button class="btn-action btn-activate" onclick="reactivarAlumno(<?= $alumno['id'] ?>)">
+                                                Reactivar
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -646,13 +916,137 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </main>
 
+<!-- Modal Editar -->
+<div id="editModal" class="modal-overlay">
+    <div class="modal-content">
+        <button class="modal-close" onclick="cerrarModal()">&times;</button>
+        <h3 class="modal-title">✏️ Editar Alumno</h3>
+        <form id="editForm">
+            <input type="hidden" id="editId" name="id">
+            
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label>Matrícula</label>
+                    <input type="text" id="editMatricula" name="matricula" placeholder="Ej: CEFXXX202600001">
+                </div>
+                <div class="modal-field">
+                    <label>Estatus</label>
+                    <select id="editEstatus" name="estatus">
+                        <option value="nuevo_ingreso">🆕 Nuevo Ingreso</option>
+                        <option value="reinscripcion">🔄 Reinscripción</option>
+                        <option value="regular">Regular</option>
+                        <option value="baja">Baja</option>
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label>Nombre(s) *</label>
+                    <input type="text" id="editNombre" name="nombre" required placeholder="Nombre(s)">
+                </div>
+                <div class="modal-field">
+                    <label>Apellido Paterno *</label>
+                    <input type="text" id="editApellidoPaterno" name="apellido_paterno" required placeholder="Apellido paterno">
+                </div>
+                <div class="modal-field">
+                    <label>Apellido Materno</label>
+                    <input type="text" id="editApellidoMaterno" name="apellido_materno" placeholder="Apellido materno">
+                </div>
+                <div class="modal-field">
+                    <label>Género *</label>
+                    <select id="editGenero" name="genero" required>
+                        <option value="masculino">Masculino</option>
+                        <option value="femenino">Femenino</option>
+                        <option value="otro">Otro</option>
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label>Sección *</label>
+                    <select id="editSeccion" name="seccion" required>
+                        <option value="maternal">Maternal</option>
+                        <option value="preescolar">Preescolar</option>
+                        <option value="primaria">Primaria</option>
+                        <option value="secundaria">Secundaria</option>
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label>Grado *</label>
+                    <select id="editGrado" name="grado" required>
+                        <?php for ($g = 1; $g <= 6; $g++): ?>
+                            <option value="<?= $g ?>"><?= $g ?>°</option>
+                        <?php endfor; ?>
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label>Grupo *</label>
+                    <select id="editGrupo" name="grupo" required>
+                        <?php foreach (['A','B','C','D'] as $g): ?>
+                            <option value="<?= $g ?>"><?= $g ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label>CURP</label>
+                    <input type="text" id="editCurp" name="curp" maxlength="18" placeholder="18 caracteres" style="text-transform: uppercase;">
+                </div>
+                <div class="modal-field">
+                    <label>Fecha Nacimiento *</label>
+                    <input type="date" id="editFechaNacimiento" name="fecha_nacimiento" required>
+                </div>
+                <div class="modal-field">
+                    <label>Fecha Ingreso *</label>
+                    <input type="date" id="editFechaIngreso" name="fecha_ingreso" required>
+                </div>
+                <div class="modal-field">
+                    <label>Beca Interna ($)</label>
+                    <input type="number" id="editBecaInterna" name="beca_interna" step="0.01" min="0" placeholder="0.00">
+                </div>
+                <div class="modal-field">
+                    <label>Beca Externa ($)</label>
+                    <input type="number" id="editBecaExterna" name="beca_externa" step="0.01" min="0" placeholder="0.00">
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn-modal-cancel" onclick="cerrarModal()">Cancelar</button>
+                <button type="submit" class="btn-modal-save">💾 Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Confirmación Baja -->
+<div id="bajaModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 450px;">
+        <button class="modal-close" onclick="cerrarBajaModal()">&times;</button>
+        <h3 class="modal-title" style="color: #dc2626;">⚠️ Confirmar Baja</h3>
+        <p style="margin-bottom: 1.5rem; color: #475569;">
+            ¿Estás seguro de que deseas dar de baja al alumno <strong id="bajaNombre"></strong>?
+            <br><small>El alumno dejará de aparecer en listas activas, pero sus datos permanecerán en el sistema.</small>
+        </p>
+        <form id="bajaForm">
+            <input type="hidden" id="bajaId" name="id">
+            <div class="modal-field">
+                <label>Motivo de baja (opcional)</label>
+                <input type="text" id="bajaMotivo" name="motivo" placeholder="Ej: Cambio de escuela, Inasistencias, etc.">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-modal-cancel" onclick="cerrarBajaModal()">Cancelar</button>
+                <button type="submit" class="btn-modal-danger">⛔ Confirmar Baja</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 let timeoutId;
 let currentRequest = null;
+let editingAlumnoId = null;
 
 const busquedaInput = document.getElementById('busquedaInput');
 const suggestionsDropdown = document.getElementById('suggestionsDropdown');
 
+// ============================================================
+// BÚSQUEDA CON SUGERENCIAS
+// ============================================================
 function buscarSugerencias() {
     const query = busquedaInput.value.trim();
     
@@ -758,7 +1152,273 @@ function aplicarFiltros() {
     window.location.href = '?' + params.toString();
 }
 
-// Eventos
+// ============================================================
+// MODAL EDITAR
+// ============================================================
+function editarAlumno(id) {
+    const botones = document.querySelectorAll('.btn-edit');
+    let boton = null;
+    botones.forEach(b => {
+        if (b.closest('tr').querySelector(`[onclick*="editarAlumno(${id})"]`)) {
+            boton = b;
+        }
+    });
+    
+    if (boton) {
+        boton.textContent = 'Cargando...';
+        boton.disabled = true;
+    }
+    
+    fetch(`api_alumno.php?action=get&id=${id}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                const a = data.data;
+                document.getElementById('editId').value = a.id;
+                document.getElementById('editMatricula').value = a.matricula || '';
+                document.getElementById('editNombre').value = a.nombre;
+                document.getElementById('editApellidoPaterno').value = a.apellido_paterno;
+                document.getElementById('editApellidoMaterno').value = a.apellido_materno || '';
+                document.getElementById('editGenero').value = a.genero;
+                document.getElementById('editSeccion').value = a.seccion;
+                document.getElementById('editGrado').value = a.grado;
+                document.getElementById('editGrupo').value = a.grupo;
+                document.getElementById('editCurp').value = a.curp || '';
+                document.getElementById('editFechaNacimiento').value = a.fecha_nacimiento;
+                document.getElementById('editFechaIngreso').value = a.fecha_ingreso;
+                document.getElementById('editEstatus').value = a.estatus || 'regular';
+                document.getElementById('editBecaInterna').value = a.beca_interna || 0;
+                document.getElementById('editBecaExterna').value = a.beca_externa || 0;
+                
+                document.getElementById('editModal').classList.add('active');
+                editingAlumnoId = id;
+            } else {
+                alert('Error: ' + (data.message || 'No se pudieron cargar los datos'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al cargar los datos del alumno. Revisa la consola para más detalles.');
+        })
+        .finally(() => {
+            if (boton) {
+                boton.textContent = '✏️ Editar';
+                boton.disabled = false;
+            }
+        });
+}
+
+// ============================================================
+// FORMULARIO DE EDICIÓN
+// ============================================================
+document.getElementById('editForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const nombre = document.getElementById('editNombre').value.trim();
+    const apellido = document.getElementById('editApellidoPaterno').value.trim();
+    const fechaNac = document.getElementById('editFechaNacimiento').value;
+    const fechaIng = document.getElementById('editFechaIngreso').value;
+    const genero = document.getElementById('editGenero').value;
+    const seccion = document.getElementById('editSeccion').value;
+    const grado = document.getElementById('editGrado').value;
+    const grupo = document.getElementById('editGrupo').value;
+    const curp = document.getElementById('editCurp').value.trim();
+    
+    if (!nombre) {
+        alert('El nombre es obligatorio');
+        document.getElementById('editNombre').focus();
+        return;
+    }
+    if (!apellido) {
+        alert('El apellido paterno es obligatorio');
+        document.getElementById('editApellidoPaterno').focus();
+        return;
+    }
+    if (!fechaNac) {
+        alert('La fecha de nacimiento es obligatoria');
+        document.getElementById('editFechaNacimiento').focus();
+        return;
+    }
+    if (!fechaIng) {
+        alert('La fecha de ingreso es obligatoria');
+        document.getElementById('editFechaIngreso').focus();
+        return;
+    }
+    if (!genero || !['masculino', 'femenino', 'otro'].includes(genero)) {
+        alert('Selecciona un género válido');
+        return;
+    }
+    if (!seccion || !['maternal', 'preescolar', 'primaria', 'secundaria'].includes(seccion)) {
+        alert('Selecciona una sección válida');
+        return;
+    }
+    if (!grado || grado < 1 || grado > 6) {
+        alert('Selecciona un grado válido (1-6)');
+        return;
+    }
+    if (!grupo || !['A', 'B', 'C', 'D'].includes(grupo)) {
+        alert('Selecciona un grupo válido');
+        return;
+    }
+    if (curp && curp.length !== 18) {
+        alert('El CURP debe tener exactamente 18 caracteres');
+        document.getElementById('editCurp').focus();
+        return;
+    }
+    
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Guardando...';
+    submitBtn.disabled = true;
+    
+    const formData = new FormData(this);
+    formData.append('action', 'update');
+    
+    fetch('api_alumno.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(async response => {
+        const text = await response.text();
+        try {
+            const data = JSON.parse(text);
+            if (!response.ok) {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            }
+            return data;
+        } catch (e) {
+            throw new Error('Respuesta del servidor no válida');
+        }
+    })
+    .then(data => {
+        if (data.success) {
+            alert('Alumno actualizado correctamente');
+            cerrarModal();
+            location.reload();
+        } else {
+            alert('Error: ' + (data.message || 'No se pudo actualizar el alumno'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al guardar: ' + error.message);
+    })
+    .finally(() => {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    });
+});
+
+// ============================================================
+// MODAL BAJA / REACTIVACIÓN
+// ============================================================
+function darDeBaja(id, nombre) {
+    document.getElementById('bajaId').value = id;
+    document.getElementById('bajaNombre').textContent = nombre;
+    document.getElementById('bajaMotivo').value = '';
+    document.getElementById('bajaModal').classList.add('active');
+}
+
+function cerrarBajaModal() {
+    document.getElementById('bajaModal').classList.remove('active');
+}
+
+document.getElementById('bajaForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Procesando...';
+    submitBtn.disabled = true;
+    
+    const formData = new FormData(this);
+    formData.append('action', 'deactivate');
+    
+    fetch('api_alumno.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(async response => {
+        const text = await response.text();
+        try {
+            const data = JSON.parse(text);
+            if (!response.ok) {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            }
+            return data;
+        } catch (e) {
+            throw new Error('Respuesta no válida');
+        }
+    })
+    .then(data => {
+        if (data.success) {
+            alert('Alumno dado de baja correctamente');
+            cerrarBajaModal();
+            location.reload();
+        } else {
+            alert('Error: ' + (data.message || 'No se pudo dar de baja al alumno'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al procesar la baja: ' + error.message);
+    })
+    .finally(() => {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    });
+});
+
+function reactivarAlumno(id) {
+    if (!confirm('¿Estás seguro de que deseas reactivar a este alumno?')) return;
+    
+    const formData = new FormData();
+    formData.append('action', 'activate');
+    formData.append('id', id);
+    
+    fetch('api_alumno.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(async response => {
+        const text = await response.text();
+        try {
+            const data = JSON.parse(text);
+            if (!response.ok) {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            }
+            return data;
+        } catch (e) {
+            throw new Error('Respuesta no válida');
+        }
+    })
+    .then(data => {
+        if (data.success) {
+            alert('Alumno reactivado correctamente');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.message || 'No se pudo reactivar al alumno'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al procesar la reactivación: ' + error.message);
+    });
+}
+
+function cerrarModal() {
+    document.getElementById('editModal').classList.remove('active');
+    editingAlumnoId = null;
+}
+
+// ============================================================
+// EVENTOS Y CIERRE DE MODALES
+// ============================================================
 if (busquedaInput) {
     busquedaInput.addEventListener('input', function() {
         clearTimeout(timeoutId);
@@ -779,14 +1439,12 @@ if (busquedaInput) {
     });
 }
 
-// Cerrar sugerencias al hacer click fuera
 document.addEventListener('click', function(e) {
     if (!busquedaInput?.contains(e.target) && !suggestionsDropdown?.contains(e.target)) {
         suggestionsDropdown.style.display = 'none';
     }
 });
 
-// Auto-aplicar al cambiar selects
 document.getElementById('generoFilter')?.addEventListener('change', aplicarFiltros);
 document.getElementById('seccionFilter')?.addEventListener('change', aplicarFiltros);
 document.getElementById('gradoFilter')?.addEventListener('change', aplicarFiltros);
@@ -795,6 +1453,26 @@ document.getElementById('estatusFilter')?.addEventListener('change', aplicarFilt
 document.getElementById('fechaIngresoFilter')?.addEventListener('change', aplicarFiltros);
 document.getElementById('becaInternaFilter')?.addEventListener('change', aplicarFiltros);
 document.getElementById('becaExternaFilter')?.addEventListener('change', aplicarFiltros);
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        cerrarModal();
+        cerrarBajaModal();
+    }
+});
+
+document.getElementById('editModal')?.addEventListener('click', function(e) {
+    if (e.target === this) cerrarModal();
+});
+document.getElementById('bajaModal')?.addEventListener('click', function(e) {
+    if (e.target === this) cerrarBajaModal();
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (busquedaInput && busquedaInput.value.trim().length >= 1) {
+        buscarSugerencias();
+    }
+});
 </script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
