@@ -33,13 +33,13 @@ class GrupoModel {
     
     public function crear(array $datos): array {
         $seccion = $datos['seccion'] ?? '';
-        $grado = (int)($datos['grado'] ?? 0);
-        $nombre = trim($datos['nombre'] ?? '');
-        $orden = (int)($datos['orden'] ?? 0);
+        $grado   = (int)($datos['grado'] ?? 0);
+        $nombre  = trim($datos['nombre'] ?? '');
+        $orden   = (int)($datos['orden'] ?? 0);
         
         if ($seccion === '') return ['error' => 'La sección es obligatoria'];
-        if ($grado <= 0) return ['error' => 'El grado es obligatorio'];
-        if ($nombre === '') return ['error' => 'El nombre es obligatorio'];
+        if ($grado <= 0)     return ['error' => 'El grado es obligatorio'];
+        if ($nombre === '')  return ['error' => 'El nombre es obligatorio'];
         
         $stmt = $this->db->prepare("SELECT id FROM grupos_catalogo WHERE seccion = ? AND grado = ? AND nombre = ? LIMIT 1");
         $stmt->bind_param('sis', $seccion, $grado, $nombre);
@@ -59,7 +59,7 @@ class GrupoModel {
     
     public function editar(int $id, array $datos): array {
         $nombre = trim($datos['nombre'] ?? '');
-        $orden = (int)($datos['orden'] ?? 0);
+        $orden  = (int)($datos['orden'] ?? 0);
         
         if ($nombre === '') return ['error' => 'El nombre es obligatorio'];
         
@@ -90,5 +90,16 @@ class GrupoModel {
             return ['success' => true];
         }
         return ['error' => 'Error al eliminar'];
+    }
+
+    public function listarNombresPorSeccion(string $seccion): array {
+        $stmt = $this->db->prepare("
+            SELECT DISTINCT nombre FROM grupos_catalogo
+            WHERE seccion = ? AND activo = 1
+            ORDER BY nombre ASC
+        ");
+        $stmt->bind_param('s', $seccion);
+        $stmt->execute();
+        return array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC), 'nombre');
     }
 }

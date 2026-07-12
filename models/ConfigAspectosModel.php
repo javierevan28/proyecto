@@ -8,9 +8,6 @@ class ConfigAspectosModel {
         $this->db = $db;
     }
     
-    /**
-     * Obtener aspectos globales por sección
-     */
     public function obtenerGlobales(string $seccion, bool $incluirAusencias = false): array {
         $sql = "SELECT id, nombre_aspecto, porcentaje_default, orden_default 
                 FROM config_aspectos_global 
@@ -26,11 +23,7 @@ class ConfigAspectosModel {
         return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
     
-    /**
-     * Obtener aspectos específicos por grado (sobrescribe globales)
-     */
     public function obtenerPorGrado(string $seccion, int $grado, bool $incluirAusencias = false): array {
-        // Primero obtener configuración específica del grado
         $sql = "SELECT nombre_aspecto, porcentaje, orden 
                 FROM config_aspectos_por_grado 
                 WHERE seccion = ? AND grado = ? AND activo = 1
@@ -45,13 +38,9 @@ class ConfigAspectosModel {
             return $gradoConfig;
         }
         
-        // Fallback a configuración global
         return $this->obtenerGlobales($seccion, $incluirAusencias);
     }
     
-    /**
-     * Obtener aspectos para una asignación específica
-     */
     public function obtenerParaAsignacion(int $asignacionId): array {
         $stmt = $this->db->prepare("
             SELECT aa.id, aa.nombre, aa.porcentaje, aa.orden 
@@ -64,9 +53,6 @@ class ConfigAspectosModel {
         return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
     
-    /**
-     * Insertar aspectos estándar para una asignación
-     */
     public function insertarAspectosEstandar(int $asignacionId, string $seccion, int $grado): void {
         $aspectos = $this->obtenerPorGrado($seccion, $grado, false);
         
@@ -77,20 +63,16 @@ class ConfigAspectosModel {
         ");
         
         foreach ($aspectos as $aspecto) {
-            $stmt->bind_param(
-                'isdi', 
-                $asignacionId, 
-                $aspecto['nombre_aspecto'] ?? $aspecto['nombre'],
-                $aspecto['porcentaje_default'] ?? $aspecto['porcentaje'],
-                $aspecto['orden_default'] ?? $aspecto['orden']
-            );
+            // Variables necesarias para que bind_param pueda pasarlas por referencia
+            $nombre     = $aspecto['nombre_aspecto'] ?? $aspecto['nombre'];
+            $porcentaje = (float)($aspecto['porcentaje_default'] ?? $aspecto['porcentaje']);
+            $orden      = (int)($aspecto['orden_default'] ?? $aspecto['orden']);
+
+            $stmt->bind_param('isdi', $asignacionId, $nombre, $porcentaje, $orden);
             $stmt->execute();
         }
     }
     
-    /**
-     * Listar todas las configuraciones globales (para admin)
-     */
     public function listarGlobales(): array {
         $res = $this->db->query("
             SELECT cg.*, 
@@ -102,9 +84,6 @@ class ConfigAspectosModel {
         return $res->fetch_all(MYSQLI_ASSOC);
     }
     
-    /**
-     * Actualizar configuración global
-     */
     public function actualizarGlobal(int $id, array $datos): array {
         $porcentaje = (float)($datos['porcentaje'] ?? 0);
         $orden      = (int)($datos['orden'] ?? 0);
@@ -123,11 +102,7 @@ class ConfigAspectosModel {
         return ['error' => 'Error al actualizar: ' . $stmt->error];
     }
     
-    /**
-     * Guardar sobrescritura por grado
-     */
     public function guardarSobrescritura(string $seccion, int $grado, array $aspectos): array {
-        // Eliminar sobrescrituras existentes para este grado
         $stmt = $this->db->prepare("
             DELETE FROM config_aspectos_por_grado 
             WHERE seccion = ? AND grado = ?
@@ -135,7 +110,6 @@ class ConfigAspectosModel {
         $stmt->bind_param('si', $seccion, $grado);
         $stmt->execute();
         
-        // Insertar nuevas sobrescrituras
         $stmt = $this->db->prepare("
             INSERT INTO config_aspectos_por_grado 
             (seccion, grado, nombre_aspecto, porcentaje, orden, activo)
@@ -143,23 +117,17 @@ class ConfigAspectosModel {
         ");
         
         foreach ($aspectos as $aspecto) {
-            $stmt->bind_param(
-                'sisdi',
-                $seccion,
-                $grado,
-                $aspecto['nombre'],
-                $aspecto['porcentaje'],
-                $aspecto['orden']
-            );
+            $nombre     = $aspecto['nombre'];
+            $porcentaje = (float)$aspecto['porcentaje'];
+            $orden      = (int)$aspecto['orden'];
+
+            $stmt->bind_param('sisdi', $seccion, $grado, $nombre, $porcentaje, $orden);
             $stmt->execute();
         }
         
         return ['success' => true];
     }
     
-    /**
-     * Eliminar sobrescritura por grado (vuelve a usar configuración global)
-     */
     public function eliminarSobrescritura(string $seccion, int $grado): array {
         $stmt = $this->db->prepare("
             DELETE FROM config_aspectos_por_grado 
