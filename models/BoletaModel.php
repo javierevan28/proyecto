@@ -89,6 +89,32 @@ class BoletaModel {
         }
 
         // ============================================================
+        // APLICAR REDONDEO ESPECIAL A CIENCIAS NATURALES
+        // ============================================================
+        foreach ($materiasConCals as &$asig) {
+            $nombreMateria = strtolower($asig['materia_nombre'] ?? '');
+            if (strpos($nombreMateria, 'ciencias naturales') !== false) {
+                // Redondear calificaciones por período
+                if (isset($asig['calificaciones']) && is_array($asig['calificaciones'])) {
+                    foreach ($asig['calificaciones'] as $p => $cal) {
+                        if ($cal !== null) {
+                            $asig['calificaciones'][$p] = $this->redondearCiencias($cal);
+                        }
+                    }
+                }
+                // Redondear trimestres
+                if (isset($asig['trimestres']) && is_array($asig['trimestres'])) {
+                    foreach ($asig['trimestres'] as $t => $prom) {
+                        if ($prom !== null) {
+                            $asig['trimestres'][$t] = $this->redondearCiencias($prom);
+                        }
+                    }
+                }
+            }
+        }
+        unset($asig);
+
+        // ============================================================
         // PROMEDIO DE INGLÉS
         // ============================================================
         $promedioIngles = array_fill(1, 6, null);
@@ -103,16 +129,13 @@ class BoletaModel {
                         $count++;
                     }
                 }
-                $promedioIngles[$p] = $count > 0 ? round($suma / $count) : null;
+                $promedioIngles[$p] = $count > 0 ? $this->redondearEstandar($suma / $count) : null;
             }
         }
 
         // ============================================================
-        // PROMEDIO DE ARTES
+        // PROMEDIO DE ARTES - AHORA CON EL REDONDEO CORRECTO
         // ============================================================
-        // Nota: Artes se muestra siempre en número entero (sin decimales).
-        // Regla de redondeo especial: el .5 baja (6.5 -> 6), el resto
-        // redondea normal (6.6 -> 7). Por eso se usa PHP_ROUND_HALF_DOWN.
         $promedioArtes = array_fill(1, 6, null);
         if (!empty($materiasArtes)) {
             for ($p = 1; $p <= 6; $p++) {
@@ -125,6 +148,7 @@ class BoletaModel {
                         $count++;
                     }
                 }
+                // Aplicar redondeo especial de Artes al promedio
                 $promedioArtes[$p] = $count > 0 ? $this->redondearArtes($suma / $count) : null;
             }
         }
@@ -145,7 +169,7 @@ class BoletaModel {
         if (!empty($materiasIngles)) {
             $trimIngles = [];
             for ($t = 1; $t <= 3; $t++) {
-                $trimIngles[$t] = $this->calcTrimestre($promedioIngles[$t*2-1], $promedioIngles[$t*2]);
+                $trimIngles[$t] = $this->calcTrimestreEstandar($promedioIngles[$t*2-1], $promedioIngles[$t*2]);
             }
             if (!isset($porCampo['LENGUAJES'])) $porCampo['LENGUAJES'] = [];
             $porCampo['LENGUAJES'][] = [
@@ -160,10 +184,11 @@ class BoletaModel {
             ];
         }
 
-        // 3. Artes - UNA SOLA FILA en LENGUAJES (al final, sin decimales)
+        // 3. Artes - UNA SOLA FILA en LENGUAJES
         if (!empty($materiasArtes)) {
             $trimArtes = [];
             for ($t = 1; $t <= 3; $t++) {
+                // Usar el redondeo de Artes para los trimestres
                 $trimArtes[$t] = $this->calcTrimestreArtes($promedioArtes[$t*2-1], $promedioArtes[$t*2]);
             }
             if (!isset($porCampo['LENGUAJES'])) $porCampo['LENGUAJES'] = [];
@@ -197,9 +222,30 @@ class BoletaModel {
         $stmt->bind_param('iii', $alumnoId, $asignacionId, $periodo);
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
-        return ($res && $res['promedio'] !== null) ? (float)round($res['promedio'], 1) : null;
+        return ($res && $res['promedio'] !== null) ? (float)$res['promedio'] : null;
     }
 
+    /**
+     * Redondeo estándar para materias normales (incluye Inglés)
+     */
+    private function redondearEstandar(?float $valor): ?float {
+        if ($valor === null) return null;
+        return (float) round($valor);
+    }
+
+    /**
+     * Redondeo para trimestres de materias normales
+     */
+    private function calcTrimestreEstandar(?float $p1, ?float $p2): ?float {
+        if ($p1 !== null && $p2 !== null) return $this->redondearEstandar(($p1 + $p2) / 2);
+        if ($p1 !== null) return $this->redondearEstandar($p1);
+        if ($p2 !== null) return $this->redondearEstandar($p2);
+        return null;
+    }
+
+    /**
+     * Redondeo para trimestres de materias base (con 1 decimal)
+     */
     private function calcTrimestre(?float $p1, ?float $p2): ?float {
         if ($p1 !== null && $p2 !== null) return round(($p1 + $p2) / 2, 1);
         if ($p1 !== null) return $p1;
@@ -208,8 +254,23 @@ class BoletaModel {
     }
 
     /**
+     * Redondeo especial para Ciencias Naturales
+     * Regla: decimal >= .6 sube al entero siguiente; decimal < .6 se queda
+     * Ejemplo: 8.5 -> 8, 8.6 -> 9
+     */
+    private function redondearCiencias(?float $valor): ?float {
+        if ($valor === null) return null;
+        
+        $entero  = floor($valor);
+        $decimal = $valor - $entero;
+        
+        return $decimal >= 0.6 ? (float) ($entero + 1) : (float) $entero;
+    }
+
+    /**
      * Promedio de trimestre exclusivo para Artes: siempre entero,
-     * con el .5 redondeando hacia abajo (6.5 -> 6, 6.6 -> 7).
+     * usando la misma regla de redondearArtes() (decimal >= .6 sube,
+     * < .6 se queda).
      */
     private function calcTrimestreArtes(?float $p1, ?float $p2): ?float {
         if ($p1 !== null && $p2 !== null) return $this->redondearArtes(($p1 + $p2) / 2);
@@ -220,11 +281,16 @@ class BoletaModel {
 
     /**
      * Redondea un valor a entero para Artes.
-     * Regla: el .5 baja (6.5 -> 6); todo lo demás redondea normal (6.6 -> 7).
+     * Regla: decimal >= .6 sube al entero siguiente; decimal < .6 se
+     * queda en el entero actual (ej. 6.5 -> 6, 6.6 -> 7).
      */
     private function redondearArtes(?float $valor): ?float {
         if ($valor === null) return null;
-        return (float) round($valor, 0, PHP_ROUND_HALF_DOWN);
+
+        $entero  = floor($valor);
+        $decimal = $valor - $entero;
+
+        return $decimal >= 0.6 ? (float) ($entero + 1) : (float) $entero;
     }
 }
 ?>

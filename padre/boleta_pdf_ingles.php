@@ -6,7 +6,7 @@ require_once __DIR__ . '/../models/UserModel.php';
 require_once __DIR__ . '/../models/PadreModel.php';
 require_once __DIR__ . '/../models/AlumnoModel.php';
 require_once __DIR__ . '/../models/CicloModel.php';
-require_once __DIR__ . '/../models/BoletaModel.php';
+require_once __DIR__ . '/../models/BoletaInglesModel.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Dompdf\Dompdf;
@@ -21,7 +21,7 @@ $db          = getConexion();
 $padreModel  = new PadreModel($db, new UserModel($db));
 $alumnoModel = new AlumnoModel($db, new UserModel($db));
 $cicloModelo = new CicloModel($db);
-$boletaModel = new BoletaModel($db);
+$boletaInglesModel = new BoletaInglesModel($db);
 
 $padre = $padreModel->obtenerPorUserId((int)$_SESSION['user_id']);
 if (!$padre) { die('Access denied'); }
@@ -39,14 +39,14 @@ if (!$alumnoValido || !$cicloActivo) {
     die('Access denied');
 }
 
-$boleta = $boletaModel->obtenerBoleta($alumnoId, (int)$cicloActivo['id']);
+$boleta = $boletaInglesModel->obtenerBoletaIngles($alumnoId, (int)$cicloActivo['id']);
 
 $alumno           = $boleta['alumno']           ?? [];
-$porCampo         = $boleta['porCampo']         ?? [];
+$materias         = $boleta['materias']         ?? [];
 $periodosAbiertos = $boleta['periodosAbiertos'] ?? [];
 
 // ============================================================
-// OBTENER SOLO MATERIAS DE INGLES
+// PROCESAR MATERIAS DE INGLES
 // ============================================================
 $listening = array_fill(1, 6, '—');
 $speaking  = array_fill(1, 6, '—');
@@ -57,32 +57,30 @@ $grammar   = array_fill(1, 6, '—');
 $spelling  = array_fill(1, 6, '—');
 $science   = array_fill(1, 6, '—');
 
-foreach ($porCampo as $campo => $materias) {
-    foreach ($materias as $m) {
-        $nombre = $m['materia_nombre'] ?? '';
-        $nombreLower = strtolower($nombre);
+foreach ($materias as $m) {
+    $nombre = $m['materia_nombre'] ?? '';
+    $nombreLower = strtolower($nombre);
+    
+    for ($p = 1; $p <= 6; $p++) {
+        $val = $m['calificaciones'][$p] ?? null;
+        $cal = ($val !== null && $val !== '') ? round($val) : '—';
         
-        for ($p = 1; $p <= 6; $p++) {
-            $val = $m['calificaciones'][$p] ?? null;
-            $cal = ($val !== null && $val !== '') ? round($val) : '—';
-            
-            if (strpos($nombreLower, 'listening') !== false) {
-                $listening[$p] = $cal;
-            } elseif (strpos($nombreLower, 'speaking') !== false) {
-                $speaking[$p] = $cal;
-            } elseif (strpos($nombreLower, 'writing') !== false) {
-                $writing[$p] = $cal;
-            } elseif (strpos($nombreLower, 'reading') !== false) {
-                $reading[$p] = $cal;
-            } elseif (strpos($nombreLower, 'vocabulary') !== false) {
-                $vocabulary[$p] = $cal;
-            } elseif (strpos($nombreLower, 'grammar') !== false) {
-                $grammar[$p] = $cal;
-            } elseif (strpos($nombreLower, 'spelling') !== false) {
-                $spelling[$p] = $cal;
-            } elseif (strpos($nombreLower, 'science') !== false) {
-                $science[$p] = $cal;
-            }
+        if (strpos($nombreLower, 'listening') !== false) {
+            $listening[$p] = $cal;
+        } elseif (strpos($nombreLower, 'speaking') !== false) {
+            $speaking[$p] = $cal;
+        } elseif (strpos($nombreLower, 'writing') !== false) {
+            $writing[$p] = $cal;
+        } elseif (strpos($nombreLower, 'reading') !== false) {
+            $reading[$p] = $cal;
+        } elseif (strpos($nombreLower, 'vocabulary') !== false) {
+            $vocabulary[$p] = $cal;
+        } elseif (strpos($nombreLower, 'grammar') !== false) {
+            $grammar[$p] = $cal;
+        } elseif (strpos($nombreLower, 'spelling') !== false) {
+            $spelling[$p] = $cal;
+        } elseif (strpos($nombreLower, 'science') !== false) {
+            $science[$p] = $cal;
         }
     }
 }
@@ -117,6 +115,22 @@ function calcTrimestreIngles($p1, $p2) {
 }
 
 function calcPromedioFinal($arr) {
+    $suma = 0;
+    $count = 0;
+    for ($p = 1; $p <= 6; $p++) {
+        if ($arr[$p] !== '—' && $arr[$p] !== null) {
+            $suma += $arr[$p];
+            $count++;
+        }
+    }
+    return $count > 0 ? round($suma / $count) : '—';
+}
+
+// FIX: promedio por MATERIA (a través de los 6 periodos), usado en la fila
+// "Average" de la tabla principal. Antes ese renglón se generaba con un
+// loop de periodos (6 celdas) en vez de materias (8 celdas), lo que dejaba
+// la fila corta frente al <thead> de 9 columnas y rompía el borde de la tabla.
+function promedioMateriaIngles($arr) {
     $suma = 0;
     $count = 0;
     for ($p = 1; $p <= 6; $p++) {
@@ -165,7 +179,8 @@ if (file_exists($logoPath)) {
     $logoBase64 = 'data:image/png;base64,' . $logoData;
 }
 
-$html = '<!DOCTYPE html>
+$html = '
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -217,7 +232,10 @@ body {
     font-size: 9px;
 }
 .tabla thead { background: #eaeaea; }
-.small { width: 100%; border-collapse: collapse; }
+.small {
+    width: 100%;
+    border-collapse: collapse;
+}
 .small th, .small td {
     border: 1px solid #444;
     padding: 3px 2px;
@@ -301,54 +319,75 @@ for ($p = 1; $p <= 6; $p++) {
     </tr>';
 }
 
+// FIX: fila "Average" ahora calcula el promedio de CADA MATERIA (8 columnas),
+// una celda por cada columna del <thead> (Period + 8 materias = 9 celdas totales).
 $html .= '<tr style="background:#f0f9ff; font-weight:700;">
-    <td style="background:#1c2c4c; color:white;">Average</td>';
-for ($p = 1; $p <= 6; $p++) {
-    $html .= '<td>' . ($promediosPeriodo[$p] ?? '—') . '</td>';
-}
-$html .= '</tr>';
+    <td style="background:#1c2c4c; color:white;">Average</td>
+    <td>' . promedioMateriaIngles($listening)  . '</td>
+    <td>' . promedioMateriaIngles($speaking)   . '</td>
+    <td>' . promedioMateriaIngles($writing)    . '</td>
+    <td>' . promedioMateriaIngles($reading)    . '</td>
+    <td>' . promedioMateriaIngles($vocabulary) . '</td>
+    <td>' . promedioMateriaIngles($grammar)    . '</td>
+    <td>' . promedioMateriaIngles($spelling)   . '</td>
+    <td>' . promedioMateriaIngles($science)    . '</td>
+</tr>';
 
 $html .= '</tbody>
 </table>
 
-<!-- TABLAS ABAJO -->
+<!-- TABLAS INFERIORES -->
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
 <tr>
-<td width="49%" valign="top">
-<table class="small">
-<thead>
-<tr><th>Period</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th></tr>
-</thead>
-<tbody>
-<tr>
-    <td><strong>Average</strong></td>
-    <td>' . ($promediosPeriodo[1] ?? '—') . '</td>
-    <td>' . ($promediosPeriodo[2] ?? '—') . '</td>
-    <td>' . ($promediosPeriodo[3] ?? '—') . '</td>
-    <td>' . ($promediosPeriodo[4] ?? '—') . '</td>
-    <td>' . ($promediosPeriodo[5] ?? '—') . '</td>
-    <td>' . ($promediosPeriodo[6] ?? '—') . '</td>
-</tr>
-</tbody>
-</table>
-</td>
-<td width="2%"></td>
-<td width="49%" valign="top">
-<table class="small">
-<thead>
-<tr><th>Trimestre</th><th>Trimestre 1</th><th>Trimestre 2</th><th>Trimestre 3</th><th>Average</th></tr>
-</thead>
-<tbody>
-<tr>
-    <td><strong>Average</strong></td>
-    <td>' . $trim1 . '</td>
-    <td>' . $trim2 . '</td>
-    <td>' . $trim3 . '</td>
-    <td>' . $promedioFinal . '</td>
-</tr>
-</tbody>
-</table>
-</td>
+    <td width="48%" valign="top">
+        <table class="small">
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th>P1</th>
+                    <th>P2</th>
+                    <th>P3</th>
+                    <th>P4</th>
+                    <th>P5</th>
+                    <th>P6</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Average</strong></td>
+                    <td>' . ($promediosPeriodo[1] ?? '—') . '</td>
+                    <td>' . ($promediosPeriodo[2] ?? '—') . '</td>
+                    <td>' . ($promediosPeriodo[3] ?? '—') . '</td>
+                    <td>' . ($promediosPeriodo[4] ?? '—') . '</td>
+                    <td>' . ($promediosPeriodo[5] ?? '—') . '</td>
+                    <td>' . ($promediosPeriodo[6] ?? '—') . '</td>
+                </tr>
+            </tbody>
+        </table>
+    </td>
+    <td width="4%"></td>
+    <td width="48%" valign="top">
+        <table class="small">
+            <thead>
+                <tr>
+                    <th>Trimestre</th>
+                    <th>T1</th>
+                    <th>T2</th>
+                    <th>T3</th>
+                    <th>Final</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Average</strong></td>
+                    <td>' . $trim1 . '</td>
+                    <td>' . $trim2 . '</td>
+                    <td>' . $trim3 . '</td>
+                    <td>' . $promedioFinal . '</td>
+                </tr>
+            </tbody>
+        </table>
+    </td>
 </tr>
 </table>
 

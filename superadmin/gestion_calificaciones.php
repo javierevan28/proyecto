@@ -168,11 +168,12 @@ if ($materiaId && $seccion && $grado && $grupo) {
 
     } elseif ($esDisciplina) {
         // ── DISCIPLINA ────────────────────────────────────────
+        // FIX: se agrega ciclo_id para evitar tomar una asignación de un ciclo distinto al activo
         $stmtAsig = $db->prepare("
             SELECT id FROM asignaciones
-            WHERE materia_id = ? AND seccion = ? AND grado = ? AND grupo = ? AND activo = 1 LIMIT 1
+            WHERE ciclo_id = ? AND materia_id = ? AND seccion = ? AND grado = ? AND grupo = ? AND activo = 1 LIMIT 1
         ");
-        $stmtAsig->bind_param('isis', $materiaId, $seccion, $grado, $grupo);
+        $stmtAsig->bind_param('iisis', $cicloId, $materiaId, $seccion, $grado, $grupo);
         $stmtAsig->execute();
         $rowAsig      = $stmtAsig->get_result()->fetch_assoc();
         $asignacionId = $rowAsig ? (int)$rowAsig['id'] : 0;
@@ -225,11 +226,12 @@ if ($materiaId && $seccion && $grado && $grupo) {
 
     } else {
         // ── NORMAL / INGLÉS / ARTES — exactamente igual ───────
+        // FIX: se agrega ciclo_id para evitar tomar una asignación de un ciclo distinto al activo
         $stmtAsig = $db->prepare("
             SELECT id FROM asignaciones
-            WHERE materia_id = ? AND seccion = ? AND grado = ? AND grupo = ? AND activo = 1 LIMIT 1
+            WHERE ciclo_id = ? AND materia_id = ? AND seccion = ? AND grado = ? AND grupo = ? AND activo = 1 LIMIT 1
         ");
-        $stmtAsig->bind_param('isis', $materiaId, $seccion, $grado, $grupo);
+        $stmtAsig->bind_param('iisis', $cicloId, $materiaId, $seccion, $grado, $grupo);
         $stmtAsig->execute();
         $rowAsig      = $stmtAsig->get_result()->fetch_assoc();
         $asignacionId = $rowAsig ? (int)$rowAsig['id'] : 0;

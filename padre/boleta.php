@@ -104,7 +104,17 @@ $ausenciasTrim3 = calcTrimestreDisciplina($ausencias[5] ?? '—', $ausencias[6] 
 // ============================================================
 function redondearArtes($valor) {
     if ($valor === null) return null;
-    return (float) round($valor, 0, PHP_ROUND_HALF_DOWN);
+
+    // REDONDEO CORREGIDO (aplica a cualquier valor, no solo al salto 6->7):
+    // decimal >= .6 sube al entero siguiente, decimal < .6 se queda en el entero actual
+    $entero  = floor($valor);
+    $decimal = $valor - $entero;
+
+    if ($decimal >= 0.6) {
+        return (float) ($entero + 1);
+    } else {
+        return (float) $entero;
+    }
 }
 
 function agruparArtes($materias, $grado, $seccion) {
