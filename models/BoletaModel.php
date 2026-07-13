@@ -110,6 +110,9 @@ class BoletaModel {
         // ============================================================
         // PROMEDIO DE ARTES
         // ============================================================
+        // Nota: Artes se muestra siempre en número entero (sin decimales).
+        // Regla de redondeo especial: el .5 baja (6.5 -> 6), el resto
+        // redondea normal (6.6 -> 7). Por eso se usa PHP_ROUND_HALF_DOWN.
         $promedioArtes = array_fill(1, 6, null);
         if (!empty($materiasArtes)) {
             for ($p = 1; $p <= 6; $p++) {
@@ -122,7 +125,7 @@ class BoletaModel {
                         $count++;
                     }
                 }
-                $promedioArtes[$p] = $count > 0 ? round($suma / $count, 1) : null;
+                $promedioArtes[$p] = $count > 0 ? $this->redondearArtes($suma / $count) : null;
             }
         }
 
@@ -157,11 +160,11 @@ class BoletaModel {
             ];
         }
 
-        // 3. Artes - UNA SOLA FILA en LENGUAJES
+        // 3. Artes - UNA SOLA FILA en LENGUAJES (al final, sin decimales)
         if (!empty($materiasArtes)) {
             $trimArtes = [];
             for ($t = 1; $t <= 3; $t++) {
-                $trimArtes[$t] = $this->calcTrimestre($promedioArtes[$t*2-1], $promedioArtes[$t*2]);
+                $trimArtes[$t] = $this->calcTrimestreArtes($promedioArtes[$t*2-1], $promedioArtes[$t*2]);
             }
             if (!isset($porCampo['LENGUAJES'])) $porCampo['LENGUAJES'] = [];
             $porCampo['LENGUAJES'][] = [
@@ -202,6 +205,26 @@ class BoletaModel {
         if ($p1 !== null) return $p1;
         if ($p2 !== null) return $p2;
         return null;
+    }
+
+    /**
+     * Promedio de trimestre exclusivo para Artes: siempre entero,
+     * con el .5 redondeando hacia abajo (6.5 -> 6, 6.6 -> 7).
+     */
+    private function calcTrimestreArtes(?float $p1, ?float $p2): ?float {
+        if ($p1 !== null && $p2 !== null) return $this->redondearArtes(($p1 + $p2) / 2);
+        if ($p1 !== null) return $this->redondearArtes($p1);
+        if ($p2 !== null) return $this->redondearArtes($p2);
+        return null;
+    }
+
+    /**
+     * Redondea un valor a entero para Artes.
+     * Regla: el .5 baja (6.5 -> 6); todo lo demás redondea normal (6.6 -> 7).
+     */
+    private function redondearArtes(?float $valor): ?float {
+        if ($valor === null) return null;
+        return (float) round($valor, 0, PHP_ROUND_HALF_DOWN);
     }
 }
 ?>

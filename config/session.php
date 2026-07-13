@@ -1,7 +1,8 @@
 <?php
 // config/session.php
 
-define('SESSION_TIMEOUT', 300); // 5 minutos en segundos
+// Eliminamos la constante de timeout
+// define('SESSION_TIMEOUT', 300); // 5 minutos en segundos - ELIMINADO
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -16,7 +17,7 @@ define('BASE_URL', '/proyecto/');
 
 /**
  * Requiere autenticación y rol válido.
- * Verifica también que la sesión no haya caducado por inactividad.
+ * Ya NO verifica timeout por inactividad.
  */
 function requireRol(array $rolesPermitidos): void {
     if (empty($_SESSION['user_id'])) {
@@ -24,7 +25,8 @@ function requireRol(array $rolesPermitidos): void {
         exit;
     }
 
-    // Verificar timeout por inactividad
+    // ELIMINADO: Verificación de timeout por inactividad
+    /*
     if (!empty($_SESSION['last_activity'])) {
         $inactivo = time() - $_SESSION['last_activity'];
         if ($inactivo > SESSION_TIMEOUT) {
@@ -35,9 +37,10 @@ function requireRol(array $rolesPermitidos): void {
             exit;
         }
     }
+    */
 
-    // Actualizar último acceso
-    $_SESSION['last_activity'] = time();
+    // Ya NO actualizamos last_activity porque no lo necesitamos
+    // $_SESSION['last_activity'] = time();
 
     if (!in_array((int)$_SESSION['rol_id'], $rolesPermitidos, true)) {
         header('Location: ' . BASE_URL . 'login.php');

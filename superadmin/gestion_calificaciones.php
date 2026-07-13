@@ -115,17 +115,24 @@ $materiasIngles  = [];
 
 if ($seccion && $grado) {
     $stmt = $db->prepare("
-        SELECT m.id, m.nombre, m.es_ingles
+        SELECT m.id, m.nombre, m.es_ingles, m.es_disciplina, m.es_ausencias
         FROM grados_materias gm
         JOIN materias m ON m.id = gm.materia_id
         WHERE gm.seccion = ? AND gm.grado = ? AND gm.activo = 1
-        ORDER BY CASE WHEN m.es_ingles = 1 THEN 1 ELSE 0 END ASC, gm.orden ASC, m.nombre ASC
+        ORDER BY 
+            CASE WHEN m.es_ingles = 1 THEN 1 ELSE 0 END ASC,
+            CASE WHEN m.es_disciplina = 1 OR m.es_ausencias = 1 THEN 1 ELSE 0 END ASC,
+            gm.orden ASC,
+            m.nombre ASC
     ");
     $stmt->bind_param('si', $seccion, $grado);
     $stmt->execute();
     foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $m) {
-        if ((int)$m['es_ingles'] === 1) $materiasIngles[] = $m;
-        else                             $materiasEspanol[] = $m;
+        if ((int)$m['es_ingles'] === 1) {
+            $materiasIngles[] = $m;
+        } else {
+            $materiasEspanol[] = $m;
+        }
     }
 }
 

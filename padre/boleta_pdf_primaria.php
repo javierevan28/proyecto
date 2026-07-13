@@ -95,14 +95,12 @@ foreach ($porCampo as $campo => $materias) {
     if (empty($materias)) continue;
     foreach ($materias as $m) {
         $nombre = $m['materia_nombre'] ?? '';
-        // Buscar Música
         if (strpos($nombre, 'Música') !== false || strpos($nombre, 'Musica') !== false) {
             for ($p = 1; $p <= 6; $p++) {
                 $val = $m['calificaciones'][$p] ?? null;
                 if ($val !== null && $val !== '') $musica[$p] = round($val);
             }
         }
-        // Buscar Danza
         if (strpos($nombre, 'Danza') !== false) {
             for ($p = 1; $p <= 6; $p++) {
                 $val = $m['calificaciones'][$p] ?? null;
@@ -112,23 +110,62 @@ foreach ($porCampo as $campo => $materias) {
     }
 }
 
+// ============================================================
+// OBTENER DISCIPLINA Y AUSENCIAS DIRECTAMENTE
+// ============================================================
 $disciplina = array_fill(1, 6, '—');
+$stmt = $db->prepare("
+    SELECT c.periodo, ROUND(SUM(c.calificacion * ad.porcentaje) / NULLIF(SUM(ad.porcentaje), 0)) AS promedio
+    FROM calificaciones_disciplina c
+    JOIN asignacion_disciplina_aspectos ad ON ad.id = c.aspecto_id
+    WHERE c.alumno_id = ? 
+      AND ad.activo = 1
+    GROUP BY c.periodo
+    ORDER BY c.periodo
+");
+if ($stmt) {
+    $stmt->bind_param('i', $alumnoId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    while ($row = $res->fetch_assoc()) {
+        $disciplina[$row['periodo']] = $row['promedio'] ?? '—';
+    }
+}
+
 $ausencias = array_fill(1, 6, '—');
-$stmt = $db->prepare("SELECT periodo, disciplina, ausencias FROM calificaciones_titular WHERE alumno_id = ? AND ciclo_id = ? ORDER BY periodo");
+$stmt = $db->prepare("
+    SELECT periodo, dias_ausencia 
+    FROM ausencias 
+    WHERE alumno_id = ? AND ciclo_id = ?
+    ORDER BY periodo
+");
 if ($stmt) {
     $stmt->bind_param('ii', $alumnoId, $cicloActivo['id']);
     $stmt->execute();
     $res = $stmt->get_result();
     while ($row = $res->fetch_assoc()) {
-        $disciplina[$row['periodo']] = $row['disciplina'] ?? '—';
-        $ausencias[$row['periodo']] = $row['ausencias'] ?? '—';
+        $ausencias[$row['periodo']] = $row['dias_ausencia'] ?? '—';
     }
 }
 
+// ============================================================
+// PROFESOR TITULAR - usando asignacion_maestros
+// ============================================================
 $nombreProfesor = 'Por asignar';
-$stmt = $db->prepare("SELECT p.nombre, p.apellido_paterno FROM grupo_titular gt JOIN profesores p ON gt.profesor_id = p.id WHERE gt.ciclo_id = ? AND gt.grado = ? AND gt.grupo = ? LIMIT 1");
+$stmt = $db->prepare("
+    SELECT p.nombre, p.apellido_paterno 
+    FROM asignacion_maestros am
+    JOIN profesores p ON p.id = am.profesor_id
+    JOIN asignaciones a ON a.id = am.asignacion_id
+    WHERE a.ciclo_id = ? 
+      AND a.seccion = ? 
+      AND a.grado = ? 
+      AND a.grupo = ? 
+      AND am.es_titular = 1
+    LIMIT 1
+");
 if ($stmt) {
-    $stmt->bind_param('iis', $cicloActivo['id'], $alumno['grado'], $alumno['grupo']);
+    $stmt->bind_param('isis', $cicloActivo['id'], $alumno['seccion'], $alumno['grado'], $alumno['grupo']);
     $stmt->execute();
     $prof = $stmt->get_result()->fetch_assoc();
     if ($prof) {
