@@ -243,13 +243,7 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <main class="container">
-  <div style="margin-bottom: 20px; text-align: right;">
-      <a class="btn btn--sm btn--success" 
-         href="boleta_pdf_primaria.php?alumno_id=<?= $alumnoId ?>" 
-         target="_blank">
-          PDF Primaria
-      </a>
-  </div>
+
 
   <?php if (empty($alumno)): ?>
     <p class="empty-state">No se encontró información del alumno.</p>

@@ -87,27 +87,59 @@ for ($p = 1; $p <= 6; $p++) {
     $artes[$p] = getCalif($porCampo, 'Artes', $p);
 }
 
-// Obtener calificaciones de Música y Danza directamente
-$musica = array_fill(1, 6, '—');
-$danza = array_fill(1, 6, '—');
+// ============================================================
+// FIX: Tabla de abajo (subcomponentes Artes/Música/Danza)
+// Las tablas calificaciones_artes / asignacion_artes_aspectos están
+// vacías — las calificaciones reales se capturan en las tablas normales
+// `calificaciones` + `asignacion_aspectos`, una asignación por materia
+// (Artes=416, Música=447, Danza=451 para 1°A). Se buscan las asignaciones
+// reales por materia_id + ciclo/sección/grado/grupo y se calcula el
+// promedio ponderado. Estas variables ($subArtes/$subMusica/$subDanza)
+// alimentan SOLO la tabla de abajo; no tocan $artes (tabla de arriba).
+// ============================================================
+function obtenerAsignacionMateria($db, $cicloId, $seccion, $grado, $grupo, $materiaId) {
+    $stmt = $db->prepare("
+        SELECT id FROM asignaciones
+        WHERE ciclo_id = ? AND materia_id = ? AND seccion = ? AND grado = ? AND grupo = ? AND activo = 1
+        LIMIT 1
+    ");
+    $stmt->bind_param('iisis', $cicloId, $materiaId, $seccion, $grado, $grupo);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    return $row ? (int)$row['id'] : null;
+}
 
-foreach ($porCampo as $campo => $materias) {
-    if (empty($materias)) continue;
-    foreach ($materias as $m) {
-        $nombre = $m['materia_nombre'] ?? '';
-        if (strpos($nombre, 'Música') !== false || strpos($nombre, 'Musica') !== false) {
-            for ($p = 1; $p <= 6; $p++) {
-                $val = $m['calificaciones'][$p] ?? null;
-                if ($val !== null && $val !== '') $musica[$p] = round($val);
-            }
-        }
-        if (strpos($nombre, 'Danza') !== false) {
-            for ($p = 1; $p <= 6; $p++) {
-                $val = $m['calificaciones'][$p] ?? null;
-                if ($val !== null && $val !== '') $danza[$p] = round($val);
-            }
-        }
-    }
+function obtenerCalifSubcomponenteArtes($db, $alumnoId, $asignacionId, $periodo) {
+    if (!$asignacionId) return null;
+    $stmt = $db->prepare("
+        SELECT SUM(c.calificacion * ap.porcentaje) / NULLIF(SUM(ap.porcentaje), 0) AS promedio
+        FROM calificaciones c
+        JOIN asignacion_aspectos ap ON ap.id = c.aspecto_id
+        WHERE c.alumno_id = ? AND c.asignacion_id = ? AND c.periodo = ?
+    ");
+    $stmt->bind_param('iii', $alumnoId, $asignacionId, $periodo);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+    return ($res && $res['promedio'] !== null) ? round($res['promedio']) : null;
+}
+
+// materia_id: 4 = Artes, 27 = Música, 28 = Danza
+$asignacionArtesId  = obtenerAsignacionMateria($db, (int)$cicloActivo['id'], $alumno['seccion'], (int)$alumno['grado'], $alumno['grupo'], 4);
+$asignacionMusicaId = obtenerAsignacionMateria($db, (int)$cicloActivo['id'], $alumno['seccion'], (int)$alumno['grado'], $alumno['grupo'], 27);
+$asignacionDanzaId  = obtenerAsignacionMateria($db, (int)$cicloActivo['id'], $alumno['seccion'], (int)$alumno['grado'], $alumno['grupo'], 28);
+
+$subArtes  = array_fill(1, 6, '—');
+$subMusica = array_fill(1, 6, '—');
+$subDanza  = array_fill(1, 6, '—');
+
+for ($p = 1; $p <= 6; $p++) {
+    $valArtes  = obtenerCalifSubcomponenteArtes($db, $alumnoId, $asignacionArtesId, $p);
+    $valMusica = obtenerCalifSubcomponenteArtes($db, $alumnoId, $asignacionMusicaId, $p);
+    $valDanza  = obtenerCalifSubcomponenteArtes($db, $alumnoId, $asignacionDanzaId, $p);
+
+    if ($valArtes  !== null) $subArtes[$p]  = $valArtes;
+    if ($valMusica !== null) $subMusica[$p] = $valMusica;
+    if ($valDanza  !== null) $subDanza[$p]  = $valDanza;
 }
 
 // ============================================================
@@ -401,30 +433,30 @@ $html .= '</tbody>
 <tbody>
 <tr>
     <td>Artes</td>
-    <td>' . ($artes[1] ?? '—') . '</td>
-    <td>' . ($artes[2] ?? '—') . '</td>
-    <td>' . ($artes[3] ?? '—') . '</td>
-    <td>' . ($artes[4] ?? '—') . '</td>
-    <td>' . ($artes[5] ?? '—') . '</td>
-    <td>' . ($artes[6] ?? '—') . '</td>
+    <td>' . ($subArtes[1] ?? '—') . '</td>
+    <td>' . ($subArtes[2] ?? '—') . '</td>
+    <td>' . ($subArtes[3] ?? '—') . '</td>
+    <td>' . ($subArtes[4] ?? '—') . '</td>
+    <td>' . ($subArtes[5] ?? '—') . '</td>
+    <td>' . ($subArtes[6] ?? '—') . '</td>
 </tr>
 <tr>
     <td>Música</td>
-    <td>' . ($musica[1] ?? '—') . '</td>
-    <td>' . ($musica[2] ?? '—') . '</td>
-    <td>' . ($musica[3] ?? '—') . '</td>
-    <td>' . ($musica[4] ?? '—') . '</td>
-    <td>' . ($musica[5] ?? '—') . '</td>
-    <td>' . ($musica[6] ?? '—') . '</td>
+    <td>' . ($subMusica[1] ?? '—') . '</td>
+    <td>' . ($subMusica[2] ?? '—') . '</td>
+    <td>' . ($subMusica[3] ?? '—') . '</td>
+    <td>' . ($subMusica[4] ?? '—') . '</td>
+    <td>' . ($subMusica[5] ?? '—') . '</td>
+    <td>' . ($subMusica[6] ?? '—') . '</td>
 </tr>
 <tr>
     <td>Danza</td>
-    <td>' . ($danza[1] ?? '—') . '</td>
-    <td>' . ($danza[2] ?? '—') . '</td>
-    <td>' . ($danza[3] ?? '—') . '</td>
-    <td>' . ($danza[4] ?? '—') . '</td>
-    <td>' . ($danza[5] ?? '—') . '</td>
-    <td>' . ($danza[6] ?? '—') . '</td>
+    <td>' . ($subDanza[1] ?? '—') . '</td>
+    <td>' . ($subDanza[2] ?? '—') . '</td>
+    <td>' . ($subDanza[3] ?? '—') . '</td>
+    <td>' . ($subDanza[4] ?? '—') . '</td>
+    <td>' . ($subDanza[5] ?? '—') . '</td>
+    <td>' . ($subDanza[6] ?? '—') . '</td>
 </tr>
 </tbody>
 </table>
