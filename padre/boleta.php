@@ -91,13 +91,24 @@ function calcTrimestreDisciplina($p1, $p2) {
     return '—';
 }
 
+function sumarTrimestreAusencias($p1, $p2) {
+    $val1 = ($p1 !== null && $p1 !== '—') ? (int)$p1 : 0;
+    $val2 = ($p2 !== null && $p2 !== '—') ? (int)$p2 : 0;
+    
+    if ($val1 === 0 && $val2 === 0) return 0;
+    if ($val1 > 0 && $val2 === 0) return $val1;
+    if ($val2 > 0 && $val1 === 0) return $val2;
+    if ($val1 > 0 && $val2 > 0) return $val1 + $val2;
+    return '—';
+}
+
 $disciplinaTrim1 = calcTrimestreDisciplina($disciplina[1] ?? '—', $disciplina[2] ?? '—');
 $disciplinaTrim2 = calcTrimestreDisciplina($disciplina[3] ?? '—', $disciplina[4] ?? '—');
 $disciplinaTrim3 = calcTrimestreDisciplina($disciplina[5] ?? '—', $disciplina[6] ?? '—');
 
-$ausenciasTrim1 = calcTrimestreDisciplina($ausencias[1] ?? '—', $ausencias[2] ?? '—');
-$ausenciasTrim2 = calcTrimestreDisciplina($ausencias[3] ?? '—', $ausencias[4] ?? '—');
-$ausenciasTrim3 = calcTrimestreDisciplina($ausencias[5] ?? '—', $ausencias[6] ?? '—');
+$ausenciasTrim1 = sumarTrimestreAusencias($ausencias[1] ?? '—', $ausencias[2] ?? '—');
+$ausenciasTrim2 = sumarTrimestreAusencias($ausencias[3] ?? '—', $ausencias[4] ?? '—');
+$ausenciasTrim3 = sumarTrimestreAusencias($ausencias[5] ?? '—', $ausencias[6] ?? '—');
 
 // ============================================================
 // AGRUPAR MATERIAS DE ARTES

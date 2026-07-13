@@ -70,7 +70,7 @@ class BoletaModel {
         }
 
         // ============================================================
-        // MATERIAS BASE (NO inglés, NO artes)
+        // MATERIAS BASE (NO inglés, NO artes) - CON REDONDEO PERSONALIZADO
         // ============================================================
         $materiasConCals = [];
         foreach ($materiasBase as $asig) {
@@ -89,33 +89,7 @@ class BoletaModel {
         }
 
         // ============================================================
-        // APLICAR REDONDEO ESPECIAL A CIENCIAS NATURALES
-        // ============================================================
-        foreach ($materiasConCals as &$asig) {
-            $nombreMateria = strtolower($asig['materia_nombre'] ?? '');
-            if (strpos($nombreMateria, 'ciencias naturales') !== false) {
-                // Redondear calificaciones por período
-                if (isset($asig['calificaciones']) && is_array($asig['calificaciones'])) {
-                    foreach ($asig['calificaciones'] as $p => $cal) {
-                        if ($cal !== null) {
-                            $asig['calificaciones'][$p] = $this->redondearCiencias($cal);
-                        }
-                    }
-                }
-                // Redondear trimestres
-                if (isset($asig['trimestres']) && is_array($asig['trimestres'])) {
-                    foreach ($asig['trimestres'] as $t => $prom) {
-                        if ($prom !== null) {
-                            $asig['trimestres'][$t] = $this->redondearCiencias($prom);
-                        }
-                    }
-                }
-            }
-        }
-        unset($asig);
-
-        // ============================================================
-        // PROMEDIO DE INGLÉS
+        // PROMEDIO DE INGLÉS - CON REDONDEO PERSONALIZADO
         // ============================================================
         $promedioIngles = array_fill(1, 6, null);
         if (!empty($materiasIngles)) {
@@ -129,12 +103,12 @@ class BoletaModel {
                         $count++;
                     }
                 }
-                $promedioIngles[$p] = $count > 0 ? $this->redondearEstandar($suma / $count) : null;
+                $promedioIngles[$p] = $count > 0 ? $this->redondearPersonalizado($suma / $count) : null;
             }
         }
 
         // ============================================================
-        // PROMEDIO DE ARTES - AHORA CON EL REDONDEO CORRECTO
+        // PROMEDIO DE ARTES - CON REDONDEO PERSONALIZADO
         // ============================================================
         $promedioArtes = array_fill(1, 6, null);
         if (!empty($materiasArtes)) {
@@ -148,10 +122,32 @@ class BoletaModel {
                         $count++;
                     }
                 }
-                // Aplicar redondeo especial de Artes al promedio
-                $promedioArtes[$p] = $count > 0 ? $this->redondearArtes($suma / $count) : null;
+                $promedioArtes[$p] = $count > 0 ? $this->redondearPersonalizado($suma / $count) : null;
             }
         }
+
+        // ============================================================
+        // APLICAR REDONDEO PERSONALIZADO A TODAS LAS MATERIAS BASE
+        // ============================================================
+        foreach ($materiasConCals as &$asig) {
+            // Redondear calificaciones por período
+            if (isset($asig['calificaciones']) && is_array($asig['calificaciones'])) {
+                foreach ($asig['calificaciones'] as $p => $cal) {
+                    if ($cal !== null) {
+                        $asig['calificaciones'][$p] = $this->redondearPersonalizado($cal);
+                    }
+                }
+            }
+            // Redondear trimestres
+            if (isset($asig['trimestres']) && is_array($asig['trimestres'])) {
+                foreach ($asig['trimestres'] as $t => $prom) {
+                    if ($prom !== null) {
+                        $asig['trimestres'][$t] = $this->redondearPersonalizado($prom);
+                    }
+                }
+            }
+        }
+        unset($asig);
 
         // ============================================================
         // ARMAR $porCampo - SOLO MATERIAS BASE + INGLES + ARTES (como promedio)
@@ -188,7 +184,6 @@ class BoletaModel {
         if (!empty($materiasArtes)) {
             $trimArtes = [];
             for ($t = 1; $t <= 3; $t++) {
-                // Usar el redondeo de Artes para los trimestres
                 $trimArtes[$t] = $this->calcTrimestreArtes($promedioArtes[$t*2-1], $promedioArtes[$t*2]);
             }
             if (!isset($porCampo['LENGUAJES'])) $porCampo['LENGUAJES'] = [];
@@ -226,25 +221,31 @@ class BoletaModel {
     }
 
     /**
-     * Redondeo estándar para materias normales (incluye Inglés)
+     * REDONDEO PERSONALIZADO PARA TODAS LAS MATERIAS
+     * Regla: decimal >= .6 sube al entero siguiente; decimal < .6 se queda
+     * Ejemplo: 7.5 -> 7, 7.6 -> 8
      */
-    private function redondearEstandar(?float $valor): ?float {
+    private function redondearPersonalizado(?float $valor): ?float {
         if ($valor === null) return null;
-        return (float) round($valor);
+        
+        $entero  = floor($valor);
+        $decimal = $valor - $entero;
+        
+        return $decimal >= 0.6 ? (float) ($entero + 1) : (float) $entero;
     }
 
     /**
-     * Redondeo para trimestres de materias normales
+     * Promedio de trimestre para materias normales
      */
     private function calcTrimestreEstandar(?float $p1, ?float $p2): ?float {
-        if ($p1 !== null && $p2 !== null) return $this->redondearEstandar(($p1 + $p2) / 2);
-        if ($p1 !== null) return $this->redondearEstandar($p1);
-        if ($p2 !== null) return $this->redondearEstandar($p2);
+        if ($p1 !== null && $p2 !== null) return $this->redondearPersonalizado(($p1 + $p2) / 2);
+        if ($p1 !== null) return $this->redondearPersonalizado($p1);
+        if ($p2 !== null) return $this->redondearPersonalizado($p2);
         return null;
     }
 
     /**
-     * Redondeo para trimestres de materias base (con 1 decimal)
+     * Promedio de trimestre para materias base (con 1 decimal)
      */
     private function calcTrimestre(?float $p1, ?float $p2): ?float {
         if ($p1 !== null && $p2 !== null) return round(($p1 + $p2) / 2, 1);
@@ -254,43 +255,13 @@ class BoletaModel {
     }
 
     /**
-     * Redondeo especial para Ciencias Naturales
-     * Regla: decimal >= .6 sube al entero siguiente; decimal < .6 se queda
-     * Ejemplo: 8.5 -> 8, 8.6 -> 9
-     */
-    private function redondearCiencias(?float $valor): ?float {
-        if ($valor === null) return null;
-        
-        $entero  = floor($valor);
-        $decimal = $valor - $entero;
-        
-        return $decimal >= 0.6 ? (float) ($entero + 1) : (float) $entero;
-    }
-
-    /**
-     * Promedio de trimestre exclusivo para Artes: siempre entero,
-     * usando la misma regla de redondearArtes() (decimal >= .6 sube,
-     * < .6 se queda).
+     * Promedio de trimestre exclusivo para Artes
      */
     private function calcTrimestreArtes(?float $p1, ?float $p2): ?float {
-        if ($p1 !== null && $p2 !== null) return $this->redondearArtes(($p1 + $p2) / 2);
-        if ($p1 !== null) return $this->redondearArtes($p1);
-        if ($p2 !== null) return $this->redondearArtes($p2);
+        if ($p1 !== null && $p2 !== null) return $this->redondearPersonalizado(($p1 + $p2) / 2);
+        if ($p1 !== null) return $this->redondearPersonalizado($p1);
+        if ($p2 !== null) return $this->redondearPersonalizado($p2);
         return null;
-    }
-
-    /**
-     * Redondea un valor a entero para Artes.
-     * Regla: decimal >= .6 sube al entero siguiente; decimal < .6 se
-     * queda en el entero actual (ej. 6.5 -> 6, 6.6 -> 7).
-     */
-    private function redondearArtes(?float $valor): ?float {
-        if ($valor === null) return null;
-
-        $entero  = floor($valor);
-        $decimal = $valor - $entero;
-
-        return $decimal >= 0.6 ? (float) ($entero + 1) : (float) $entero;
     }
 }
 ?>

@@ -89,13 +89,6 @@ for ($p = 1; $p <= 6; $p++) {
 
 // ============================================================
 // FIX: Tabla de abajo (subcomponentes Artes/Música/Danza)
-// Las tablas calificaciones_artes / asignacion_artes_aspectos están
-// vacías — las calificaciones reales se capturan en las tablas normales
-// `calificaciones` + `asignacion_aspectos`, una asignación por materia
-// (Artes=416, Música=447, Danza=451 para 1°A). Se buscan las asignaciones
-// reales por materia_id + ciclo/sección/grado/grupo y se calcula el
-// promedio ponderado. Estas variables ($subArtes/$subMusica/$subDanza)
-// alimentan SOLO la tabla de abajo; no tocan $artes (tabla de arriba).
 // ============================================================
 function obtenerAsignacionMateria($db, $cicloId, $seccion, $grado, $grupo, $materiaId) {
     $stmt = $db->prepare("
@@ -181,7 +174,25 @@ if ($stmt) {
 }
 
 // ============================================================
-// PROFESOR TITULAR - usando asignacion_maestros
+// CALCULAR TRIMESTRES DE AUSENCIAS (SUMA, NO PROMEDIO)
+// ============================================================
+function sumarTrimestreAusencias($p1, $p2) {
+    $val1 = ($p1 !== null && $p1 !== '—') ? (int)$p1 : 0;
+    $val2 = ($p2 !== null && $p2 !== '—') ? (int)$p2 : 0;
+    
+    if ($val1 === 0 && $val2 === 0) return 0;
+    if ($val1 > 0 && $val2 === 0) return $val1;
+    if ($val2 > 0 && $val1 === 0) return $val2;
+    if ($val1 > 0 && $val2 > 0) return $val1 + $val2;
+    return '—';
+}
+
+$ausenciasTrim1 = sumarTrimestreAusencias($ausencias[1] ?? '—', $ausencias[2] ?? '—');
+$ausenciasTrim2 = sumarTrimestreAusencias($ausencias[3] ?? '—', $ausencias[4] ?? '—');
+$ausenciasTrim3 = sumarTrimestreAusencias($ausencias[5] ?? '—', $ausencias[6] ?? '—');
+
+// ============================================================
+// PROFESOR TITULAR - CORREGIDO (sin es_titular)
 // ============================================================
 $nombreProfesor = 'Por asignar';
 $stmt = $db->prepare("
@@ -193,7 +204,7 @@ $stmt = $db->prepare("
       AND a.seccion = ? 
       AND a.grado = ? 
       AND a.grupo = ? 
-      AND am.es_titular = 1
+      AND am.activo = 1
     LIMIT 1
 ");
 if ($stmt) {
@@ -271,6 +282,11 @@ $humanoT1   = promCampoTrim($educacion_fisica, $vida_saludable, $socioemocional,
 $humanoT2   = promCampoTrim($educacion_fisica, $vida_saludable, $socioemocional, 3, 4);
 $humanoT3   = promCampoTrim($educacion_fisica, $vida_saludable, $socioemocional, 5, 6);
 $humanoProm = promCampoAnual($educacion_fisica, $vida_saludable, $socioemocional);
+
+// Calcular trimestres de ausencias para la tabla de abajo
+$ausenciasTrim1 = sumarTrimestreAusencias($ausencias[1] ?? '—', $ausencias[2] ?? '—');
+$ausenciasTrim2 = sumarTrimestreAusencias($ausencias[3] ?? '—', $ausencias[4] ?? '—');
+$ausenciasTrim3 = sumarTrimestreAusencias($ausencias[5] ?? '—', $ausencias[6] ?? '—');
 
 $html = '<!DOCTYPE html>
 <html lang="es">

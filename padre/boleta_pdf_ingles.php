@@ -126,10 +126,6 @@ function calcPromedioFinal($arr) {
     return $count > 0 ? round($suma / $count) : '—';
 }
 
-// FIX: promedio por MATERIA (a través de los 6 periodos), usado en la fila
-// "Average" de la tabla principal. Antes ese renglón se generaba con un
-// loop de periodos (6 celdas) en vez de materias (8 celdas), lo que dejaba
-// la fila corta frente al <thead> de 9 columnas y rompía el borde de la tabla.
 function promedioMateriaIngles($arr) {
     $suma = 0;
     $count = 0;
@@ -148,7 +144,7 @@ $trim3 = calcTrimestreIngles($promediosPeriodo[5], $promediosPeriodo[6]);
 $promedioFinal = calcPromedioFinal($promediosPeriodo);
 
 // ============================================================
-// PROFESOR TITULAR
+// PROFESOR DE INGLÉS (CORREGIDO - busca profesor de inglés, no titular del grupo)
 // ============================================================
 $nombreProfesor = 'Not assigned';
 $stmt = $db->prepare("
@@ -156,11 +152,13 @@ $stmt = $db->prepare("
     FROM asignacion_maestros am
     JOIN profesores p ON p.id = am.profesor_id
     JOIN asignaciones a ON a.id = am.asignacion_id
+    JOIN materias m ON m.id = a.materia_id
     WHERE a.ciclo_id = ? 
       AND a.seccion = ? 
       AND a.grado = ? 
       AND a.grupo = ? 
-      AND am.es_titular = 1
+      AND m.es_ingles = 1
+      AND am.activo = 1
     LIMIT 1
 ");
 if ($stmt) {
@@ -319,8 +317,6 @@ for ($p = 1; $p <= 6; $p++) {
     </tr>';
 }
 
-// FIX: fila "Average" ahora calcula el promedio de CADA MATERIA (8 columnas),
-// una celda por cada columna del <thead> (Period + 8 materias = 9 celdas totales).
 $html .= '<tr style="background:#f0f9ff; font-weight:700;">
     <td style="background:#1c2c4c; color:white;">Average</td>
     <td>' . promedioMateriaIngles($listening)  . '</td>
