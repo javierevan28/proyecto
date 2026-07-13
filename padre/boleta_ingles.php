@@ -47,7 +47,7 @@ $periodosAbiertos = $boleta['periodosAbiertos'] ?? [];
 
 $pageTitle = 'English Report Card — ' . ($alumno['nombre'] ?? '');
 $backLink = 'mis_hijos.php';
-$backLabel = '← My children';
+$backLabel = '← Mis hijos';
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -78,6 +78,11 @@ include __DIR__ . '/../includes/header.php';
                     Cycle: <strong><?= htmlspecialchars($cicloActivo['nombre']) ?></strong>
                 </p>
             </div>
+            <a class="btn btn--sm btn--accent"
+           href="boleta_pdf_ingles.php?alumno_id=<?= $alumnoId ?>" 
+           target="_blank">
+          PDF Boleta
+        </a>
         </div>
     </div>
 
