@@ -49,6 +49,77 @@ class ReporteModel {
         return null;
     }
 
+    /**
+     * Calcula los periodos/trimestres de una materia y devuelve el arreglo
+     * de valores listo para insertarse en 'columnas'.
+     */
+    private function calcularValoresMateria(
+        int $alumnoId, int $materiaAsignacionId, array $periodosAb,
+        string $vista, array $colsSeleccionadas
+    ): array {
+        $cals = [];
+        for ($p = 1; $p <= 6; $p++) {
+            $cals[$p] = in_array($p, $periodosAb)
+                ? $this->obtenerCalificacionMateria($alumnoId, $materiaAsignacionId, $p)
+                : null;
+        }
+        $trims = [];
+        for ($t = 1; $t <= 3; $t++) {
+            $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
+        }
+        $valores = [];
+        foreach ($colsSeleccionadas as $col) {
+            $valores[$col] = $vista === 'periodo' ? $cals[$col] : $trims[$col];
+        }
+        return $valores;
+    }
+
+    /**
+     * Las ausencias NO se capturan como calificación (no tienen aspectos en
+     * asignacion_aspectos), viven en su propia tabla `ausencias`
+     * (alumno_id, ciclo_id, periodo, dias_ausencia). Por eso se leen aparte
+     * en vez de usar obtenerCalificacionMateria().
+     */
+    private function obtenerAusenciasAlumno(
+        int $alumnoId, int $cicloId, array $periodosAb,
+        string $vista, array $colsSeleccionadas
+    ): array {
+        $stmt = $this->db->prepare("
+            SELECT periodo, dias_ausencia
+            FROM ausencias
+            WHERE alumno_id = ? AND ciclo_id = ?
+        ");
+        $stmt->bind_param('ii', $alumnoId, $cicloId);
+        $stmt->execute();
+        $filas = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        $porPeriodo = [];
+        foreach ($filas as $f) {
+            $porPeriodo[(int)$f['periodo']] = (int)$f['dias_ausencia'];
+        }
+
+        $cals = [];
+        for ($p = 1; $p <= 6; $p++) {
+            $cals[$p] = (in_array($p, $periodosAb) && isset($porPeriodo[$p]))
+                ? $porPeriodo[$p]
+                : null;
+        }
+
+        // Para trimestre se suman los días de ausencia de los 2 periodos (no se promedia)
+        $trims = [];
+        for ($t = 1; $t <= 3; $t++) {
+            $p1 = $cals[$t*2-1];
+            $p2 = $cals[$t*2];
+            $trims[$t] = ($p1 === null && $p2 === null) ? null : ($p1 ?? 0) + ($p2 ?? 0);
+        }
+
+        $valores = [];
+        foreach ($colsSeleccionadas as $col) {
+            $valores[$col] = $vista === 'periodo' ? $cals[$col] : $trims[$col];
+        }
+        return $valores;
+    }
+
     public function listarGrupos(int $cicloId): array {
         $stmt = $this->db->prepare("
             SELECT DISTINCT seccion, grado, grupo
@@ -87,7 +158,7 @@ class ReporteModel {
 
         // Materias del grupo
         $stmtMat = $this->db->prepare("
-            SELECT a.id, m.nombre, m.es_ingles, m.es_artes, cf.nombre as campo_nombre, cf.id as campo_id
+            SELECT a.id, m.nombre, m.es_ingles, m.es_artes, m.es_ausencias, cf.nombre as campo_nombre, cf.id as campo_id
             FROM asignaciones a
             JOIN materias m ON m.id = a.materia_id
             LEFT JOIN campos_formativos cf ON cf.id = a.campo_formativo_id
@@ -112,45 +183,60 @@ class ReporteModel {
             }
         }
 
+        // ============================================================
+        // NOMBRES DE LENGUA MATERNA/ESPAÑOL
+        // (movido arriba del filtro de "materias base" para que el
+        // filtro pueda usarlo: ver FIX abajo)
+        // ============================================================
+        $nombresLengua = ['Lengua Materna', 'Español'];
+
+        // Las materias base que no pertenecen a ningún campo formativo no deben
+        // aparecer ni afectar el promedio. Las excepciones son:
+        //  - Ausencias: se muestra aparte, pero tampoco cuenta para el promedio.
+        //  - Lengua Materna / Español: SIEMPRE debe mostrarse aunque a la
+        //    asignación le falte el campo_formativo_id (esto es lo que
+        //    causaba que en 1° de secundaria "Lengua Materna" desapareciera
+        //    del reporte: al no tener campo asignado, se descartaba en
+        //    silencio antes de llegar a buscarla por nombre). [FIX]
+        $materiaAusencias = null;
+        $materiasBaseFiltradas = [];
+        foreach ($materiasBase as $mat) {
+            if ((int)($mat['es_ausencias'] ?? 0) === 1) {
+                $materiaAusencias = $mat;
+            } elseif ($mat['campo_id'] !== null || in_array($mat['nombre'], $nombresLengua)) {
+                // FIX: se agrega el OR in_array(...) para no perder
+                // Lengua Materna/Español cuando campo_id viene NULL.
+                $materiasBaseFiltradas[] = $mat;
+            }
+            // else: sin campo formativo, no es Ausencias, no es Lengua Materna/Español -> se descarta
+        }
+        $materiasBase = $materiasBaseFiltradas;
+
         foreach ($alumnos as &$al) {
             $al['columnas'] = [];
 
             if ($agrupacion === 'materia') {
                 // =========================================================
                 // VISTA POR MATERIA
-                // Mostrar: Lengua Materna, Inglés (promedio), Artes (promedio)
-                // y luego las demás materias base
                 // =========================================================
                 
-                // Separar Lengua Materna de las demás materias base
+                // Separar Lengua Materna/Español de las demás materias base
                 $lenguaMaterna = null;
                 $otrasMateriasBase = [];
                 
                 foreach ($materiasBase as $mat) {
-                    if ($mat['nombre'] === 'Lengua Materna') {
+                    if (in_array($mat['nombre'], $nombresLengua)) {
                         $lenguaMaterna = $mat;
                     } else {
                         $otrasMateriasBase[] = $mat;
                     }
                 }
                 
-                // 1. Mostrar Lengua Materna (si existe)
+                // 1. Mostrar Lengua Materna/Español (si existe)
                 if ($lenguaMaterna) {
-                    $cals = [];
-                    for ($p = 1; $p <= 6; $p++) {
-                        $cals[$p] = in_array($p, $periodosAb) 
-                            ? $this->obtenerCalificacionMateria($al['alumno_id'], $lenguaMaterna['id'], $p) 
-                            : null;
-                    }
-                    $trims = [];
-                    for ($t = 1; $t <= 3; $t++) {
-                        $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
-                    }
-                    $valores = [];
-                    foreach ($colsSeleccionadas as $col) {
-                        $valores[$col] = $vista === 'periodo' ? $cals[$col] : $trims[$col];
-                    }
-                    $al['columnas'][] = ['key' => 'mat_' . $lenguaMaterna['id'], 'valor' => $valores];
+                    $valores = $this->calcularValoresMateria($al['alumno_id'], $lenguaMaterna['id'], $periodosAb, $vista, $colsSeleccionadas);
+                    $label = $seccion === 'secundaria' ? 'Español' : 'Lengua Materna';
+                    $al['columnas'][] = ['key' => 'mat_' . $lenguaMaterna['id'], 'valor' => $valores, 'incluir_promedio' => true, 'label' => $label];
                 }
                 
                 // 2. Promedio de INGLÉS (todas las materias de inglés juntas)
@@ -178,7 +264,7 @@ class ReporteModel {
                     foreach ($colsSeleccionadas as $col) {
                         $valoresIngles[$col] = $vista === 'periodo' ? $calsIngles[$col] : $trimsIngles[$col];
                     }
-                    $al['columnas'][] = ['key' => 'ingles', 'valor' => $valoresIngles];
+                    $al['columnas'][] = ['key' => 'ingles', 'valor' => $valoresIngles, 'incluir_promedio' => true];
                 }
 
                 // 3. Promedio de ARTES (todas las materias de artes juntas)
@@ -206,39 +292,62 @@ class ReporteModel {
                     foreach ($colsSeleccionadas as $col) {
                         $valoresArtes[$col] = $vista === 'periodo' ? $calsArtes[$col] : $trimsArtes[$col];
                     }
-                    $al['columnas'][] = ['key' => 'artes', 'valor' => $valoresArtes];
+                    $al['columnas'][] = ['key' => 'artes', 'valor' => $valoresArtes, 'incluir_promedio' => true];
                 }
                 
-                // 4. Mostrar las demás materias base
+                // 4. Mostrar las demás materias base (ya filtradas: solo las que
+                //    pertenecen a un campo formativo, o Lengua Materna/Español)
                 foreach ($otrasMateriasBase as $mat) {
-                    $cals = [];
-                    for ($p = 1; $p <= 6; $p++) {
-                        $cals[$p] = in_array($p, $periodosAb) 
-                            ? $this->obtenerCalificacionMateria($al['alumno_id'], $mat['id'], $p) 
-                            : null;
-                    }
-                    $trims = [];
-                    for ($t = 1; $t <= 3; $t++) {
-                        $trims[$t] = $this->calcTrimestre($cals[$t*2-1], $cals[$t*2]);
-                    }
-                    $valores = [];
-                    foreach ($colsSeleccionadas as $col) {
-                        $valores[$col] = $vista === 'periodo' ? $cals[$col] : $trims[$col];
-                    }
-                    $al['columnas'][] = ['key' => 'mat_' . $mat['id'], 'valor' => $valores];
+                    $valores = $this->calcularValoresMateria($al['alumno_id'], $mat['id'], $periodosAb, $vista, $colsSeleccionadas);
+                    $al['columnas'][] = ['key' => 'mat_' . $mat['id'], 'valor' => $valores, 'incluir_promedio' => true];
+                }
+
+                // 5. Ausencias: se muestra pero no cuenta para el promedio
+                if ($materiaAusencias) {
+                    $valoresAusencias = $this->obtenerAusenciasAlumno($al['alumno_id'], $cicloId, $periodosAb, $vista, $colsSeleccionadas);
+                    $al['columnas'][] = ['key' => 'mat_' . $materiaAusencias['id'], 'valor' => $valoresAusencias, 'incluir_promedio' => false];
                 }
 
             } else {
                 // =========================================================
-                // VISTA POR CAMPO FORMATIVO (ORIGINAL)
-                // LENGUAJES con un solo promedio que incluye todo
+                // VISTA POR CAMPO FORMATIVO (MODIFICADA)
+                // Lengua Materna/Español aparece como columna individual
+                // LENGUAJES = solo Inglés + Artes (sin Lengua Materna/Español)
                 // =========================================================
-                $campos = [];
+                
+                // --- PASO 1: DETECTAR LENGUA MATERNA/ESPAÑOL ---
+                $lenguaMaternaMat = null;
+                $otrasMateriasBase = [];
+                
                 foreach ($materiasBase as $mat) {
+                    if (in_array($mat['nombre'], $nombresLengua)) {
+                        $lenguaMaternaMat = $mat;
+                    } else {
+                        $otrasMateriasBase[] = $mat;
+                    }
+                }
+                
+                $campos = [];
+                
+                // --- PASO 2: AGREGAR LENGUA MATERNA/ESPAÑOL COMO CAMPO INDIVIDUAL ---
+                if ($lenguaMaternaMat !== null) {
+                    $nombreLengua = $seccion === 'secundaria' ? 'ESPAÑOL' : 'LENGUA MATERNA';
+                    $campos['lengua_materna'] = [
+                        'nombre' => $nombreLengua,
+                        'materias_ids' => [$lenguaMaternaMat['id']],
+                        'incluye_ingles' => false,
+                        'incluye_artes' => false
+                    ];
+                }
+                
+                // --- PASO 3: AGREGAR EL RESTO DE CAMPOS FORMATIVOS ---
+                foreach ($otrasMateriasBase as $mat) {
                     $campoKey = $mat['campo_id'] ?? 'sin_campo';
+                    $nombreCampo = $mat['campo_nombre'] ?? 'Sin campo';
+                    
                     if (!isset($campos[$campoKey])) {
                         $campos[$campoKey] = [
-                            'nombre' => $mat['campo_nombre'] ?? 'Sin campo', 
+                            'nombre' => $nombreCampo,
                             'materias_ids' => [],
                             'incluye_ingles' => false,
                             'incluye_artes' => false
@@ -247,7 +356,7 @@ class ReporteModel {
                     $campos[$campoKey]['materias_ids'][] = $mat['id'];
                 }
                 
-                // Campo LENGUAJES (incluye inglés y artes)
+                // --- PASO 4: LENGUAJES SOLO INCLUYE INGLÉS Y ARTES ---
                 $campoLenguajesKey = null;
                 foreach ($campos as $key => $campo) {
                     if ($campo['nombre'] === 'LENGUAJES') {
@@ -258,17 +367,20 @@ class ReporteModel {
                 
                 if ($campoLenguajesKey === null) {
                     $campoLenguajesKey = 'lenguajes';
+                    $nombreLenguajes = ($lenguaMaternaMat !== null) ? 'LENGUAJES (sin Lengua Materna)' : 'LENGUAJES';
                     $campos[$campoLenguajesKey] = [
-                        'nombre' => 'LENGUAJES',
+                        'nombre' => $nombreLenguajes,
                         'materias_ids' => [],
                         'incluye_ingles' => false,
                         'incluye_artes' => false
                     ];
                 }
                 
+                // LENGUAJES ahora SOLO incluye inglés y artes (NO Lengua Materna/Español)
                 $campos[$campoLenguajesKey]['incluye_ingles'] = !empty($materiasIngles);
                 $campos[$campoLenguajesKey]['incluye_artes'] = !empty($materiasArtes);
                 
+                // --- PASO 5: CALCULAR PROMEDIOS PARA CADA CAMPO ---
                 foreach ($campos as $campoKey => $campoData) {
                     $promCals = [];
                     
@@ -340,14 +452,24 @@ class ReporteModel {
                     
                     $al['columnas'][] = [
                         'key' => 'campo_' . $campoKey, 
-                        'valor' => $valores
+                        'valor' => $valores,
+                        'incluir_promedio' => true
                     ];
+                }
+
+                // --- PASO 6: AUSENCIAS ---
+                if ($materiaAusencias) {
+                    $valoresAusencias = $this->obtenerAusenciasAlumno($al['alumno_id'], $cicloId, $periodosAb, $vista, $colsSeleccionadas);
+                    $al['columnas'][] = ['key' => 'mat_' . $materiaAusencias['id'], 'valor' => $valoresAusencias, 'incluir_promedio' => false];
                 }
             }
 
-            // Promedio general redondeado
+            // Promedio general redondeado (excluye columnas marcadas como incluir_promedio = false, p.ej. Ausencias)
             $todos = [];
             foreach ($al['columnas'] as $col) {
+                if (isset($col['incluir_promedio']) && $col['incluir_promedio'] === false) {
+                    continue;
+                }
                 foreach ($col['valor'] as $v) {
                     if ($v !== null) $todos[] = $v;
                 }
@@ -356,13 +478,16 @@ class ReporteModel {
             $al['promedio_general'] = $promGeneral !== null ? $this->redondearNota($promGeneral) : null;
         }
 
-        // Encabezados
+        // ============================================================
+        // ENCABEZADOS
+        // ============================================================
         $encabezados = [];
         if ($agrupacion === 'materia') {
-            // Lengua Materna
+            // Lengua Materna/Español
             foreach ($materiasBase as $mat) {
-                if ($mat['nombre'] === 'Lengua Materna') {
-                    $encabezados[] = ['key' => 'mat_' . $mat['id'], 'label' => $mat['nombre']];
+                if (in_array($mat['nombre'], $nombresLengua)) {
+                    $label = $seccion === 'secundaria' ? 'Español' : 'Lengua Materna';
+                    $encabezados[] = ['key' => 'mat_' . $mat['id'], 'label' => $label];
                     break;
                 }
             }
@@ -376,17 +501,62 @@ class ReporteModel {
             }
             // Otras materias base
             foreach ($materiasBase as $mat) {
-                if ($mat['nombre'] !== 'Lengua Materna') {
+                if (!in_array($mat['nombre'], $nombresLengua)) {
                     $encabezados[] = ['key' => 'mat_' . $mat['id'], 'label' => $mat['nombre']];
                 }
             }
+            // Ausencias
+            if ($materiaAusencias) {
+                $encabezados[] = ['key' => 'mat_' . $materiaAusencias['id'], 'label' => $materiaAusencias['nombre']];
+            }
         } else {
             // Campos formativos
-            foreach ($campos as $campoKey => $campoData) {
+            // NOTA: $campos aquí es el valor que quedó tras el último alumno
+            // procesado en el foreach de arriba. Como $materiasBase (y por
+            // lo tanto $lenguaMaternaMat) es igual para todo el grupo, esto
+            // es consistente entre alumnos, pero si el grupo no tiene
+            // alumnos, $campos nunca se calculó y los encabezados saldrían
+            // vacíos. Por eso se recalcula aquí de forma independiente.
+            $lenguaMaternaMatHdr = null;
+            $otrasMateriasBaseHdr = [];
+            foreach ($materiasBase as $mat) {
+                if (in_array($mat['nombre'], $nombresLengua)) {
+                    $lenguaMaternaMatHdr = $mat;
+                } else {
+                    $otrasMateriasBaseHdr[] = $mat;
+                }
+            }
+
+            $camposHdr = [];
+            if ($lenguaMaternaMatHdr !== null) {
+                $nombreLengua = $seccion === 'secundaria' ? 'ESPAÑOL' : 'LENGUA MATERNA';
+                $camposHdr['lengua_materna'] = ['nombre' => $nombreLengua];
+            }
+            foreach ($otrasMateriasBaseHdr as $mat) {
+                $campoKey = $mat['campo_id'] ?? 'sin_campo';
+                $nombreCampo = $mat['campo_nombre'] ?? 'Sin campo';
+                if (!isset($camposHdr[$campoKey])) {
+                    $camposHdr[$campoKey] = ['nombre' => $nombreCampo];
+                }
+            }
+            $tieneLenguajes = false;
+            foreach ($camposHdr as $c) {
+                if ($c['nombre'] === 'LENGUAJES') { $tieneLenguajes = true; break; }
+            }
+            if (!$tieneLenguajes && (!empty($materiasIngles) || !empty($materiasArtes))) {
+                $nombreLenguajes = ($lenguaMaternaMatHdr !== null) ? 'LENGUAJES (sin Lengua Materna)' : 'LENGUAJES';
+                $camposHdr['lenguajes'] = ['nombre' => $nombreLenguajes];
+            }
+
+            foreach ($camposHdr as $campoKey => $campoData) {
                 $encabezados[] = [
-                    'key' => 'campo_' . $campoKey, 
+                    'key' => 'campo_' . $campoKey,
                     'label' => $campoData['nombre']
                 ];
+            }
+            // Ausencias
+            if ($materiaAusencias) {
+                $encabezados[] = ['key' => 'mat_' . $materiaAusencias['id'], 'label' => $materiaAusencias['nombre']];
             }
         }
 
@@ -407,4 +577,3 @@ class ReporteModel {
         ];
     }
 }
-?>
